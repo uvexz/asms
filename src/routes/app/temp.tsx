@@ -289,7 +289,7 @@ function CreateTempModal({
                 label="前缀"
                 value={prefix}
                 onChange={(value) => setPrefix(value.toLowerCase())}
-                hint="名-姓 + 三位数字，例如 alice-bob123"
+                hint="至少 8 位"
               />
               <Button
                 size="xs"
