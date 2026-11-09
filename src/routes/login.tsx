@@ -1,10 +1,6 @@
-import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
-import { useState } from 'react'
+import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 
-import { AuthCard } from '@/components/application/auth/auth-card'
-import { toast } from '@/components/base/toast/toast'
-import { authClient } from '@/lib/auth-client'
-import { authErrorMessage } from '@/lib/auth-errors'
+import { LoginPanel } from '@/components/application/auth/login-panel'
 import { fetchPublicConfig } from '@/server/functions/auth'
 
 export const Route = createFileRoute('/login')({
@@ -18,49 +14,35 @@ export const Route = createFileRoute('/login')({
 
 function LoginPage() {
   const config = Route.useLoaderData()
-  const router = useRouter()
-  const [pending, setPending] = useState(false)
-  const [remember, setRemember] = useState(true)
-
-  const submit = async (form: FormData) => {
-    if (pending) return
-    setPending(true)
-    const email = String(form.get('email') ?? '')
-    const password = String(form.get('password') ?? '')
-    const { error } = await authClient.signIn.email({
-      email,
-      password,
-      rememberMe: remember,
-    })
-    setPending(false)
-    if (error) {
-      toast.error('登录失败', { description: authErrorMessage(error) })
-      return
-    }
-    await router.invalidate()
-    await router.navigate({ to: '/app' })
-  }
 
   return (
     <main className="grid min-h-dvh place-items-center bg-background-full p-6">
-      <div className="w-full max-w-md">
-        <AuthCard
-          mode="signin"
-          title={`登录 ${config.siteName}`}
-          description="使用你的账号进入邮箱面板。"
-          providers={config.providers as never}
-          rememberMe={remember}
-          onRememberChange={setRemember}
-          onSubmit={submit}
-          onProvider={(provider) => {
-            void authClient.signIn.social({ provider, callbackURL: '/app' })
-          }}
-          switchHref="/register"
-          footnote={
-            <span className="text-caption-1-regular text-text-tertiary">
-              {config.siteDescription}
+      <div className="flex w-full max-w-[400px] flex-col gap-6">
+        <Link
+          to="/"
+          className="flex w-fit items-center gap-2.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring"
+        >
+          {config.logoUrl ? (
+            <img
+              src={config.logoUrl}
+              alt=""
+              className="size-7 rounded-lg object-cover"
+            />
+          ) : (
+            <span className="flex size-7 items-center justify-center rounded-lg bg-accent-600 text-caption-1-semibold text-text-white">
+              {config.siteName.slice(0, 1).toUpperCase()}
             </span>
-          }
+          )}
+          <span className="text-body-medium text-text-secondary">
+            {config.siteName}
+          </span>
+        </Link>
+
+        <LoginPanel
+          headingLevel={1}
+          providers={config.providers}
+          registrationEnabled={config.registrationEnabled}
+          emailPasswordEnabled={config.emailPasswordEnabled}
         />
       </div>
     </main>

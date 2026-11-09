@@ -1,0 +1,138 @@
+/* ---------------------------------------------------------------------------
+ * Landing page motion
+ *
+ * Everything here is transform + opacity on purpose: the compositor handles
+ * it, nothing reflows, and the page stays cheap on a phone. Load animations
+ * are declarative (they run from CSS, so they survive a failed hydration);
+ * the scroll reveal is opt-in from JS through `data-reveal`.
+ * --------------------------------------------------------------------------- */
+
+@keyframes landing-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes landing-panel {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes landing-rule {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes landing-seal {
+  from {
+    opacity: 0;
+    transform: scaleX(0.35);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes landing-alert {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .landing-enter {
+    animation: landing-rise 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .landing-d-1 {
+    animation-delay: 40ms;
+  }
+
+  .landing-d-2 {
+    animation-delay: 120ms;
+  }
+
+  .landing-d-3 {
+    animation-delay: 210ms;
+  }
+
+  .landing-d-4 {
+    animation-delay: 300ms;
+  }
+
+  /* The card settles a beat after the copy, so the eye reads the promise
+     before it lands on the fields. */
+  .landing-panel {
+    animation: landing-panel 760ms cubic-bezier(0.16, 1, 0.3, 1) 160ms both;
+  }
+
+  /* The one expressive mark: a hairline drawn under the last word, and the
+     seal line across the top of the card. Both run once. */
+  .landing-rule {
+    transform-origin: left center;
+    animation: landing-rule 720ms cubic-bezier(0.16, 1, 0.3, 1) 520ms both;
+  }
+
+  .landing-seal {
+    transform-origin: center;
+    animation: landing-seal 900ms cubic-bezier(0.16, 1, 0.3, 1) 620ms both;
+  }
+
+  /*
+   * Scroll reveal. The element is visible by default; JS only parks it when
+   * it is still below the fold, then releases it. No JS, no hiding.
+   */
+  [data-reveal='pending'] [data-reveal-item] {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+
+  [data-reveal='in'] [data-reveal-item] {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    transition:
+      opacity 520ms cubic-bezier(0.16, 1, 0.3, 1),
+      transform 520ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition-delay: calc(var(--reveal-index, 0) * 70ms);
+  }
+
+  .landing-alert {
+    animation: landing-alert 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-enter,
+  .landing-panel,
+  .landing-rule,
+  .landing-seal,
+  .landing-alert {
+    animation: none !important;
+  }
+
+  [data-reveal='pending'] [data-reveal-item] {
+    opacity: 1;
+    transform: none;
+  }
+}
