@@ -14,7 +14,6 @@ import {
   RiImageAiLine,
   RiKanbanView2,
   RiMegaphoneLine,
-  RiSettings4Line,
   RiSideBarFill,
   RiUserSmileLine,
 } from "@remixicon/react";
@@ -213,9 +212,6 @@ export function DashboardSidebar({
   className,
   user,
   isAdmin = false,
-  siteName = "asms",
-  siteLogoUrl,
-  showSettingsRow = true,
   onSettings,
   onSignOut,
   onAdmin,
@@ -240,11 +236,7 @@ export function DashboardSidebar({
   className?: string;
   user?: SidebarUser;
   isAdmin?: boolean;
-  siteName?: string;
-  /** Configured site logo; the site name's initial stands in when absent. */
-  siteLogoUrl?: string;
-  /** Hide the secondary "设置" row where the main nav already carries settings. */
-  showSettingsRow?: boolean;
+  /** Account settings action, surfaced by the user menu. */
   onSettings?: () => void;
   onSignOut?: () => void;
   onAdmin?: () => void;
@@ -359,48 +351,6 @@ export function DashboardSidebar({
               className={flat ? "!bg-background-secondary-default" : undefined}
             />
           ))}
-        {/* Secondary nav */}
-        {onSettings && showSettingsRow ? (
-          <nav aria-label="账号设置" className="flex w-full flex-col gap-1">
-            <NavItem
-              icon={RiSettings4Line}
-              label="设置"
-              collapsed={collapsed}
-              isSelected={selected === "settings"}
-              onClick={onSettings}
-            />
-          </nav>
-        ) : null}
-
-        <div
-          className={cx(
-            "flex items-center gap-2 rounded-xl bg-background-tertiary-default py-2 pe-3 ps-2.5",
-            collapsed && "size-9 justify-center p-0",
-            flat && "!bg-background-secondary-default",
-          )}
-        >
-          {siteLogoUrl ? (
-            <img
-              src={siteLogoUrl}
-              alt=""
-              className="size-8 shrink-0 rounded-full object-cover"
-            />
-          ) : (
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-100 text-caption-1-semibold text-accent-700">
-              {siteName.slice(0, 1).toUpperCase()}
-            </span>
-          )}
-          {!collapsed && (
-            <span className="flex min-w-0 flex-col">
-              <span className="truncate text-body-medium text-text-primary">
-                {siteName}
-              </span>
-              <span className="truncate text-caption-1-regular text-text-secondary">
-                邮件服务
-              </span>
-            </span>
-          )}
-        </div>
       </div>
     </aside>
   ));

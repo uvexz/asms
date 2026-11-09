@@ -99,9 +99,6 @@ function AdminLayout() {
       selected={selectedKey(location.pathname)}
       user={{ name: user.name, email: user.email, image: user.image }}
       isAdmin
-      siteName={`${site.siteName} 管理`}
-      siteLogoUrl={site.logoUrl}
-      showSettingsRow={false}
       onSettings={() => {
         setMobileOpen(false)
         void router.navigate({ to: '/app/settings' })
@@ -127,9 +124,6 @@ function AdminLayout() {
           selected={selectedKey(location.pathname)}
           user={{ name: user.name, email: user.email, image: user.image }}
           isAdmin
-          siteName={`${site.siteName} 管理`}
-          siteLogoUrl={site.logoUrl}
-          showSettingsRow={false}
           onSettings={() => void router.navigate({ to: '/app/settings' })}
           onSignOut={() => void signOut()}
         />

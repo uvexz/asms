@@ -6,13 +6,14 @@ import {
   useLocation,
   useRouter,
 } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   RiDashboardLine,
   RiInboxLine,
   RiMailSendLine,
   RiMenuLine,
   RiSendPlaneLine,
+  RiSettings4Line,
 } from '@remixicon/react'
 
 import { DashboardSidebar } from '@/components/application/dashboard/dashboard-sidebar'
@@ -47,6 +48,12 @@ const NAV: DashboardNavItem[] = [
     href: '/app/compose',
   },
   { key: 'sent', label: '已发送', icon: RiSendPlaneLine, href: '/app/sent' },
+  {
+    key: 'settings',
+    label: '设置',
+    icon: RiSettings4Line,
+    href: '/app/settings',
+  },
 ]
 
 function selectedKey(pathname: string) {
@@ -68,6 +75,10 @@ function AppLayout() {
   const router = useRouter()
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
+  // 抽屉里的导航都是真实跳转，路径一变就把抽屉收起来。
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [location.pathname])
   // The mail view is a three-pane client: it needs the full width it can get.
   const wide = location.pathname.startsWith('/app/mailboxes')
 
@@ -86,8 +97,6 @@ function AppLayout() {
       selected={selectedKey(location.pathname)}
       user={{ name: user.name, email: user.email, image: user.image }}
       isAdmin={user.role === 'admin'}
-      siteName={site.siteName}
-      siteLogoUrl={site.logoUrl}
       onSettings={() => {
         setMobileOpen(false)
         void router.navigate({ to: '/app/settings' })
@@ -121,8 +130,6 @@ function AppLayout() {
           selected={selectedKey(location.pathname)}
           user={{ name: user.name, email: user.email, image: user.image }}
           isAdmin={user.role === 'admin'}
-          siteName={site.siteName}
-          siteLogoUrl={site.logoUrl}
           onSettings={() => void router.navigate({ to: '/app/settings' })}
           onAdmin={
             user.role === 'admin'
