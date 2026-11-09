@@ -103,6 +103,7 @@ function SettingsPage() {
           <Avatar
             size="lg"
             color="neutral"
+            name={user.email || user.name}
             initials={user.name.slice(0, 1).toUpperCase()}
             src={user.image ?? undefined}
           />

@@ -1,5 +1,8 @@
 /* eslint-disable @next/next/no-img-element */
 import type { HTMLAttributes, Ref } from "react";
+import { Blobatar } from "@blobatar/react";
+import type { Animate, TraitOverrides } from "blobatar";
+import "blobatar/motion.css";
 import { cx, sortCx } from "@/utils/cx";
 
 /**
@@ -12,12 +15,12 @@ import { cx, sortCx } from "@/utils/cx";
  *   md = 32   sidebar workspace / team card  (initials 16/22 semibold)
  *   lg = 36   people cards                   (initials 18/24 semibold)
  *
- * Renders a photo when `src` is given, otherwise centered initials on a
- * tinted disc. Initial tints from Figma:
- *   neutral → bg avatar/neutral/background, text text/secondary
- *   blue    → bg color/blue/300,    text color/blue/900
- *   lime    → bg color/lime/200,    text color/lime/700
- *   pink    → bg color/pink/200,    text color/pink/500
+ * Three states, in priority order:
+ *   src    → the uploaded/remote photo.
+ *   name   → a blobatar derived from that string. This is the default avatar:
+ *            deterministic, so the same account always wears the same face,
+ *            and it needs no upload, no network request and no storage.
+ *   none   → initials on a tinted disc, kept for callers that have no seed.
  */
 
 type AvatarSize = "xs" | "sm" | "md" | "lg";
@@ -26,13 +29,31 @@ type AvatarColor = "neutral" | "blue" | "lime" | "pink";
 export interface AvatarProps extends HTMLAttributes<HTMLSpanElement> {
   size?: AvatarSize;
   color?: AvatarColor;
-  /** Photo URL. Wins over `initials`. */
+  /** Photo URL. Wins over everything else. */
   src?: string;
   alt?: string;
-  /** Fallback initials, e.g. "M". */
+  /**
+   * Seed for the fallback blobatar — a stable identity, not a label. Pass the
+   * email (or handle) so a nickname change does not redraw the face.
+   */
+  name?: string;
+  /**
+   * Blobatar idle motion. `always` suits the one avatar on a profile or in the
+   * sidebar; pass `hover` where many avatars share a screen (tables, grids).
+   * Requires inline SVG, which `@blobatar/react` switches to whenever it is set.
+   */
+  animate?: Animate;
+  /** Fallback initials when there is neither a photo nor a seed. */
   initials?: string;
   ref?: Ref<HTMLSpanElement>;
 }
+
+/**
+ * One house silhouette for everyone — `shape` is a 0–1 position over the
+ * generation's silhouettes, and 0.11 lands inside the first band (round), so
+ * every account is round and only hue, tone and features vary per name.
+ */
+const blobatarTraits: TraitOverrides = { shape: 0.11 };
 
 const styles = sortCx({
   base: "inline-flex shrink-0 select-none items-center justify-center overflow-hidden rounded-full text-center align-middle transition-[width,height,font-size] duration-200 ease",
@@ -55,15 +76,27 @@ export function Avatar({
   color = "neutral",
   src,
   alt,
+  name,
+  animate = "always",
   initials,
   className,
   ref,
   ...props
 }: AvatarProps) {
+  // The tinted disc exists to back initials. A photo covers it, and a blobatar
+  // is a figure with its own contrast — a disc behind that reads as a halo ring
+  // around the antialiased edge instead of as an avatar.
+  const isInitials = !src && !name;
+
   return (
     <span
       ref={ref}
-      className={cx(styles.base, styles.size[size], styles.color[color], className)}
+      className={cx(
+        styles.base,
+        styles.size[size],
+        isInitials && styles.color[color],
+        className,
+      )}
       {...props}
     >
       {src ? (
@@ -73,6 +106,16 @@ export function Avatar({
           loading="lazy"
           decoding="async"
           className="size-full object-cover"
+        />
+      ) : name ? (
+        // No plate: the figure sits directly on the surface, so it reads flat
+        // like a photo does. Its own palette keeps head and eyes apart.
+        <Blobatar
+          name={name}
+          background={false}
+          traits={blobatarTraits}
+          animate={animate}
+          className="size-full"
         />
       ) : (
         initials

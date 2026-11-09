@@ -9,6 +9,7 @@ import {
   RiTimeLine,
 } from '@remixicon/react'
 
+import { Avatar } from '@/components/base/avatar/avatar'
 import { Chip } from '@/components/base/badges/chip'
 import { Button, ButtonLink } from '@/components/base/buttons/button'
 import { Skeleton } from '@/components/base/skeleton/skeleton'
@@ -183,11 +184,11 @@ function OverviewPage() {
                 search={{ mailbox: item.mailboxId, message: item.id }}
                 className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-background-secondary-hover"
               >
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-background-secondary-default text-caption-1-semibold text-text-secondary">
-                  {(item.fromName || item.fromAddress)
-                    .slice(0, 1)
-                    .toUpperCase()}
-                </span>
+                <Avatar
+                  size="lg"
+                  animate="hover"
+                  name={item.fromAddress || item.fromName || 'unknown sender'}
+                />
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="flex items-center gap-2">
                     <span className="truncate text-body-medium text-text-primary">

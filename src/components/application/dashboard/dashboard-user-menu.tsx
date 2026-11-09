@@ -113,6 +113,7 @@ export function DashboardUserMenu({
         <Avatar
           size="md"
           color="neutral"
+          name={user.email || user.name}
           initials={initials}
           src={user.image ?? undefined}
           className={avatarClassName}
@@ -140,7 +141,13 @@ export function DashboardUserMenu({
       >
         <AriaDialog aria-label="账号菜单" className="flex flex-col outline-none">
           <div className="flex items-center gap-2.5 px-2 pb-2 pt-1">
-            <Avatar size="md" color="neutral" initials={initials} src={user.image ?? undefined} />
+            <Avatar
+              size="md"
+              color="neutral"
+              name={user.email || user.name}
+              initials={initials}
+              src={user.image ?? undefined}
+            />
             <div className="flex min-w-0 flex-col">
               <span className="truncate text-body-medium text-text-primary">{user.name}</span>
               <span className="truncate text-caption-1-regular text-text-tertiary">{user.email}</span>
