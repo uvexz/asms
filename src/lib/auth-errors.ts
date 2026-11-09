@@ -16,10 +16,23 @@ const MESSAGES: Record<string, string> = {
   INVALID_TOKEN: '链接已失效，请重新发起',
   TOKEN_EXPIRED: '链接已过期，请重新发起',
   SESSION_EXPIRED: '登录状态已过期，请重新登录',
+  SESSION_NOT_FRESH: '登录状态已过期，请重新登录',
   EMAIL_NOT_VERIFIED: '请先验证邮箱后再登录',
   SIGNUP_DISABLED: '站点暂未开放注册',
   RATE_LIMITED: '尝试次数过多，请稍后再试',
   TOO_MANY_REQUESTS: '尝试次数过多，请稍后再试',
+  // Third-party sign-in and account linking.
+  PROVIDER_NOT_FOUND: '站点没有开启这种方式登录',
+  EMAIL_NOT_FOUND: '第三方账号没有返回邮箱地址',
+  ACCOUNT_NOT_LINKED: '这个第三方账号还没有绑定，请先用其他方式登录',
+  ACCOUNT_ALREADY_LINKED_TO_DIFFERENT_USER: '该第三方账号已绑定到另一个用户',
+  EMAIL_DOES_NOT_MATCH: '第三方账号的邮箱与当前账号不一致',
+  UNABLE_TO_LINK_ACCOUNT: '无法绑定这个账号，请稍后再试',
+  FAILED_TO_UNLINK_LAST_ACCOUNT: '这是唯一的登录方式，无法解绑',
+  NO_CODE: '授权已取消，请重新发起',
+  STATE_NOT_FOUND: '授权流程已失效，请重新发起',
+  INVALID_CALLBACK_REQUEST: '授权流程已失效，请重新发起',
+  ACCESS_DENIED: '授权已取消',
 }
 
 /**
@@ -29,7 +42,10 @@ const MESSAGES: Record<string, string> = {
  */
 export function authErrorMessage(error?: AuthErrorLike | null): string {
   if (!error) return '操作没有完成，请稍后再试'
-  const byCode = error.code ? MESSAGES[error.code] : undefined
+  const code = error.code?.trim()
+  const byCode = code
+    ? (MESSAGES[code] ?? MESSAGES[code.toUpperCase()])
+    : undefined
   if (byCode) return byCode
   const message = error.message?.trim()
   if (message && /[\u4e00-\u9fff]/.test(message)) return message

@@ -1,10 +1,14 @@
 import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 
 import { LoginPanel } from '@/components/application/auth/login-panel'
+import { authErrorMessage } from '@/lib/auth-errors'
 import { fetchPublicConfig } from '@/server/functions/auth'
 
 export const Route = createFileRoute('/login')({
   head: () => ({ meta: [{ title: '登录 · asms' }] }),
+  validateSearch: (search: Record<string, unknown>): { error?: string } => ({
+    error: typeof search.error === 'string' ? search.error : undefined,
+  }),
   loader: async () => fetchPublicConfig(),
   beforeLoad: ({ context }) => {
     if (context.session) throw redirect({ to: '/app' })
@@ -14,6 +18,7 @@ export const Route = createFileRoute('/login')({
 
 function LoginPage() {
   const config = Route.useLoaderData()
+  const { error } = Route.useSearch()
 
   return (
     <main className="grid min-h-dvh place-items-center bg-background-full p-6">
@@ -43,6 +48,7 @@ function LoginPage() {
           providers={config.providers}
           registrationEnabled={config.registrationEnabled}
           emailPasswordEnabled={config.emailPasswordEnabled}
+          initialError={error ? authErrorMessage({ code: error }) : null}
         />
       </div>
     </main>

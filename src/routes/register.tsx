@@ -7,6 +7,7 @@ import { ButtonLink } from '@/components/base/buttons/button'
 import { toast } from '@/components/base/toast/toast'
 import { authClient } from '@/lib/auth-client'
 import { authErrorMessage } from '@/lib/auth-errors'
+import { isBrandProvider } from '@/lib/oauth-providers'
 import { fetchPublicConfig, fetchSetupStatus } from '@/server/functions/auth'
 
 export const Route = createFileRoute('/register')({
@@ -70,10 +71,16 @@ function RegisterPage() {
           mode="signup"
           title={`创建 ${config.siteName} 账号`}
           description="账号邮箱仅用于登录，不会作为收件地址。"
-          providers={config.providers as never}
+          // Only the brands the card ships a glyph for; a plain OIDC provider
+          // signs up on first sign-in from the login screen instead.
+          providers={config.providers.filter(isBrandProvider)}
           onSubmit={submit}
           onProvider={(provider) => {
-            void authClient.signIn.social({ provider, callbackURL: '/app' })
+            void authClient.signIn.social({
+              provider,
+              callbackURL: '/app',
+              errorCallbackURL: '/login',
+            })
           }}
           switchHref="/login"
         />

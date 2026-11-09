@@ -7,6 +7,7 @@ import {
   RiErrorWarningLine,
   RiEyeLine,
   RiEyeOffLine,
+  RiShieldKeyholeLine,
 } from '@remixicon/react'
 import { FieldError } from 'react-aria-components'
 
@@ -17,14 +18,11 @@ import { Divider } from '@/components/base/divider/divider'
 import { hintTextClassName } from '@/components/base/input/hint-text'
 import { Input, InputBase, TextField } from '@/components/base/input/input'
 import { Label } from '@/components/base/input/label'
-import {
-  SOCIAL_PROVIDERS,
-  type SocialProvider,
-} from '@/components/base/social-button/social-providers'
 import { SocialButton } from '@/components/base/social-button/social-button'
 import { Spinner } from '@/components/base/spinner/spinner'
 import { authClient } from '@/lib/auth-client'
 import { authErrorMessage } from '@/lib/auth-errors'
+import { isBrandProvider, providerLabel } from '@/lib/oauth-providers'
 import { cx } from '@/utils/cx'
 
 /**
@@ -59,6 +57,8 @@ export interface LoginPanelProps {
   providers: string[]
   registrationEnabled: boolean
   emailPasswordEnabled: boolean
+  /** Message left behind by a failed OAuth round-trip, shown above the form. */
+  initialError?: string | null
   /** `1` on `/login`, where the card is the page; `2` inside the hero. */
   headingLevel?: 1 | 2
   className?: string
@@ -68,6 +68,7 @@ export function LoginPanel({
   providers,
   registrationEnabled,
   emailPasswordEnabled,
+  initialError,
   headingLevel = 2,
   className,
 }: LoginPanelProps) {
@@ -80,12 +81,10 @@ export function LoginPanel({
   const [reveal, setReveal] = useState(false)
   const [remember, setRemember] = useState(true)
   const [errors, setErrors] = useState<FieldErrors>({})
-  const [formError, setFormError] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(initialError ?? null)
   const [status, setStatus] = useState<Status>('idle')
 
-  const social = (providers as SocialProvider[]).filter(
-    (provider) => provider in SOCIAL_PROVIDERS,
-  )
+  const social = providers
   const busy = status !== 'idle'
   const Heading = `h${headingLevel}` as const
 
@@ -297,22 +296,40 @@ export function LoginPanel({
                   social.length > 2 && 'grid-cols-3',
                 )}
               >
-                {social.map((provider) => (
-                  <SocialButton
-                    key={provider}
-                    brand={provider}
-                    appearance="white"
-                    iconOnly
-                    className="w-full"
-                    aria-label={`使用 ${SOCIAL_PROVIDERS[provider].label} 登录`}
-                    onClick={() => {
-                      void authClient.signIn.social({
-                        provider,
-                        callbackURL: '/app',
-                      })
-                    }}
-                  />
-                ))}
+                {social.map((provider) => {
+                  const brand = isBrandProvider(provider)
+                  const label = providerLabel(provider)
+                  return (
+                    <SocialButton
+                      key={provider}
+                      brand={brand ? provider : 'custom'}
+                      config={
+                        brand
+                          ? undefined
+                          : {
+                              label,
+                              icon: (
+                                <RiShieldKeyholeLine
+                                  aria-hidden
+                                  className="size-[18px]"
+                                />
+                              ),
+                            }
+                      }
+                      appearance="white"
+                      iconOnly
+                      className="w-full"
+                      aria-label={`使用 ${label} 登录`}
+                      onClick={() => {
+                        void authClient.signIn.social({
+                          provider,
+                          callbackURL: '/app',
+                          errorCallbackURL: '/login',
+                        })
+                      }}
+                    />
+                  )
+                })}
               </div>
             </>
           ) : null}

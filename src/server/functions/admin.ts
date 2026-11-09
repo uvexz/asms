@@ -13,7 +13,8 @@ import {
   oauthProviders,
   user,
 } from '#/db/schema'
-import { resetAuthCache } from '#/lib/auth'
+import { getEnabledProviderIds, resetAuthCache } from '#/lib/auth'
+import { isOidcProvider, MANAGED_PROVIDERS } from '#/lib/oauth-providers'
 import { encryptSecret } from '../crypto'
 import { asAdmin } from '../session'
 import { AppError, assert } from '../result'
@@ -101,14 +102,11 @@ export const adminSaveSettingsFn = createServerFn({ method: 'POST' })
           entry.key === 'auth.emailPasswordEnabled' && entry.value === false,
       )
       if (disablingPassword) {
-        const providers = await db
-          .select({ provider: oauthProviders.provider })
-          .from(oauthProviders)
-          .where(eq(oauthProviders.enabled, true))
+        const providers = await getEnabledProviderIds()
         if (providers.length === 0) {
           throw new AppError(
             'LAST_LOGIN_METHOD',
-            '至少保留一种登录方式：请先启用 Google 或 GitHub 登录',
+            '至少保留一种登录方式：请先启用一个第三方登录',
           )
         }
       }
@@ -482,14 +480,33 @@ export const adminOAuthFn = createServerFn({ method: 'GET' }).handler(
     asAdmin(async () => {
       const rows = await db.select().from(oauthProviders)
       const map = new Map(rows.map((row) => [row.provider, row]))
+      const envOidc = Boolean(
+        process.env.OIDC_ISSUER && process.env.OIDC_CLIENT_ID,
+      )
+
       return {
-        items: ['google', 'github'].map((provider) => {
+        items: MANAGED_PROVIDERS.map((provider) => {
           const row = map.get(provider)
+          // The `OIDC_*` environment block stands in until a row exists.
+          const fromEnv = provider === 'sb' && !row && envOidc
           return {
             provider,
-            enabled: row?.enabled ?? false,
-            clientId: row?.clientId ?? '',
-            hasSecret: Boolean(row?.clientSecretEnc),
+            enabled: row?.enabled ?? fromEnv,
+            clientId:
+              row?.clientId ??
+              (fromEnv ? (process.env.OIDC_CLIENT_ID ?? '') : ''),
+            issuer:
+              row?.issuer ?? (fromEnv ? (process.env.OIDC_ISSUER ?? '') : ''),
+            scopes:
+              row?.scopes ?? (fromEnv ? (process.env.OIDC_SCOPES ?? '') : ''),
+            hasSecret:
+              Boolean(row?.clientSecretEnc) ||
+              (fromEnv && Boolean(process.env.OIDC_CLIENT_SECRET)),
+            source: row
+              ? ('db' as const)
+              : fromEnv
+                ? ('env' as const)
+                : ('none' as const),
           }
         }),
         callbackBase: `${process.env.BETTER_AUTH_URL ?? 'http://localhost:3000'}/api/auth/callback`,
@@ -500,16 +517,26 @@ export const adminOAuthFn = createServerFn({ method: 'GET' }).handler(
 export const adminSaveOAuthFn = createServerFn({ method: 'POST' })
   .validator(
     z.object({
-      provider: z.enum(['google', 'github']),
+      provider: z.enum(MANAGED_PROVIDERS),
       enabled: z.boolean(),
       clientId: z.string().max(300),
       clientSecret: z.string().max(300).optional(),
+      issuer: z.string().max(300).optional(),
+      scopes: z.string().max(300).optional(),
     }),
   )
   .handler(async ({ data }) =>
     asAdmin(async ({ user: actor }) => {
+      const oidc = isOidcProvider(data.provider)
+      const issuer = normalizeIssuer(data.issuer)
+
       if (data.enabled && !data.clientId.trim()) {
         throw new AppError('OAUTH_CLIENT_ID_REQUIRED', '启用前请填写 Client ID')
+      }
+      if (oidc && data.enabled) {
+        assert(issuer, 'OIDC_ISSUER_REQUIRED', '启用前请填写 Issuer')
+        const url = parseUrl(issuer)
+        assert(url, 'OIDC_ISSUER_INVALID', 'Issuer 需要是完整的 https 地址')
       }
 
       const existing = await db
@@ -520,7 +547,7 @@ export const adminSaveOAuthFn = createServerFn({ method: 'POST' })
 
       const secretEnc = data.clientSecret?.trim()
         ? encryptSecret(data.clientSecret.trim())
-        : (existing?.clientSecretEnc ?? null)
+        : (existing?.clientSecretEnc ?? envSecret(data.provider))
 
       if (data.enabled && !secretEnc) {
         throw new AppError(
@@ -529,23 +556,21 @@ export const adminSaveOAuthFn = createServerFn({ method: 'POST' })
         )
       }
 
+      const values = {
+        enabled: data.enabled,
+        clientId: data.clientId.trim(),
+        clientSecretEnc: secretEnc,
+        issuer: oidc ? issuer : null,
+        scopes: oidc ? data.scopes?.trim() || null : null,
+        updatedAt: new Date(),
+      }
+
       await db
         .insert(oauthProviders)
-        .values({
-          provider: data.provider,
-          enabled: data.enabled,
-          clientId: data.clientId.trim(),
-          clientSecretEnc: secretEnc,
-          updatedAt: new Date(),
-        })
+        .values({ provider: data.provider, ...values })
         .onConflictDoUpdate({
           target: oauthProviders.provider,
-          set: {
-            enabled: data.enabled,
-            clientId: data.clientId.trim(),
-            clientSecretEnc: secretEnc,
-            updatedAt: new Date(),
-          },
+          set: values,
         })
 
       resetAuthCache()
@@ -623,3 +648,28 @@ export const adminIngestFn = createServerFn({ method: 'GET' })
       }
     }),
   )
+
+/** An issuer is a bare origin-plus-path; a trailing slash breaks discovery. */
+function normalizeIssuer(value?: string): string | null {
+  const trimmed = value?.trim().replace(/\/+$/, '')
+  return trimmed ? trimmed : null
+}
+
+/**
+ * A provider served from `OIDC_*` never stored a secret, so saving the rest of
+ * the form without retyping it adopts the environment one.
+ */
+function envSecret(provider: string): string | null {
+  if (!isOidcProvider(provider)) return null
+  const secret = process.env.OIDC_CLIENT_SECRET?.trim()
+  return secret ? encryptSecret(secret) : null
+}
+
+function parseUrl(value: string): URL | null {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url : null
+  } catch {
+    return null
+  }
+}

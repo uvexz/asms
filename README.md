@@ -5,7 +5,7 @@
 - **框架**：TanStack Start（React 19 + Nitro）
 - **UI**：BoardUI（Tailwind v4，组件按 registry 原样安装）
 - **数据库**：libSQL（本地 SQLite 文件 / Turso 线上）
-- **认证**：Better Auth（邮箱密码 + Google/GitHub OAuth + admin 插件）
+- **认证**：Better Auth（邮箱密码 + Google/GitHub/sb.sb OIDC + admin 插件）
 - **邮件**：Resend 收发，S3 兼容存储保存附件（可选）
 
 ## 功能
@@ -17,7 +17,7 @@
 - 收件箱：列表 + 正文 + 附件，HTML 在 sandbox iframe 中渲染，默认拦截远程图片。
 - 写邮件：纯文本自动生成 HTML，每日额度由管理员配置（默认 5 封）。
 - 已发送：查看 Resend 投递状态（送达 / 退信 / 投诉等）。
-- 个人设置：昵称、密码、退出登录。
+- 个人设置：昵称、密码、第三方账号绑定 / 解绑、退出登录。
 
 ### 管理面板 `/admin`
 
@@ -25,7 +25,7 @@
 - 邮件策略：长期邮箱上限、每日发件额度、临时邮箱 TTL、地址冷却期、保留天数。
 - Resend：API Key、Webhook Secret、发件显示名、系统发件地址，支持一键测试连接。
 - 域名：添加 / 验证 / 刷新 / 设为默认 / 启停收发 / 查看 DNS 记录。
-- 第三方登录：Google、GitHub 的 Client ID / Secret 与启停。
+- 第三方登录：Google、GitHub 的 Client ID / Secret 与启停；sb.sb 走标准 OIDC，填 Issuer 即可自动发现端点。
 - 用户管理：角色调整、封禁 / 解封。
 - 邮箱管理、审计日志、收件日志（排查“邮件为什么没收到”）。
 
@@ -107,7 +107,14 @@ Resend Dashboard → Webhooks → 添加：
 | `CRON_SECRET`           | 建议     | `/api/cron/cleanup` 的 Bearer 口令                          |
 | `RESEND_API_KEY`        | 否       | 仅作兜底；面板配置优先                                      |
 | `RESEND_WEBHOOK_SECRET` | 否       | 仅作兜底；面板配置优先                                      |
+| `OIDC_ISSUER`           | 否       | sb.sb 登录的 issuer，如 `https://sb.sb/oidc`                |
+| `OIDC_CLIENT_ID`        | 否       | 配合 `OIDC_ISSUER` 使用；面板保存后以面板为准               |
+| `OIDC_CLIENT_SECRET`    | 否       | 同上                                                        |
+| `OIDC_REDIRECT_URI`     | 否       | 默认 `<BETTER_AUTH_URL>/api/auth/callback/sb`               |
+| `OIDC_SCOPES`           | 否       | 默认 `openid profile email offline_access`                  |
 | `PORT`                  | 否       | Node 服务端口，默认 3000                                    |
+
+`OIDC_*` 只在面板里还没有保存过 sb.sb 时生效：保存（或关闭）后完全以数据库为准。回调地址需在 sb.sb 登记为 `<BETTER_AUTH_URL>/api/auth/callback/sb`；scope 必须包含 `email`，否则第三方账号不会返回登录邮箱。
 
 ## 数据库
 

@@ -11,6 +11,12 @@ import { Tab, TabList, TabPanel, Tabs } from '@/components/base/tabs/tabs'
 import { toast } from '@/components/base/toast/toast'
 import { PageHeader } from '@/components/app/page-header'
 import {
+  DEFAULT_OIDC_SCOPES,
+  isOidcProvider,
+  providerLabel,
+} from '@/lib/oauth-providers'
+import type { ManagedProvider } from '@/lib/oauth-providers'
+import {
   adminOAuthFn,
   adminSaveOAuthFn,
   adminSaveSettingsFn,
@@ -45,6 +51,8 @@ function AdminSettingsPage() {
   })
 
   const rows = settings.data?.ok ? settings.data.data.rows : []
+  const oauthItems = oauth.data?.ok ? oauth.data.data.items : []
+  const callbackBase = oauth.data?.ok ? oauth.data.data.callbackBase : ''
 
   useEffect(() => {
     if (!rows.length) return
@@ -441,38 +449,20 @@ function AdminSettingsPage() {
           </SettingsCard>
 
           <div className="mt-4 flex flex-col gap-4">
-            <OAuthEditor
-              key={`google-${oauth.data?.ok ? (oauth.data.data.items.find((i) => i.provider === 'google')?.clientId ?? '') : ''}`}
-              provider="google"
-              label="Google"
-              callbackBase={oauth.data?.ok ? oauth.data.data.callbackBase : ''}
-              initial={
-                oauth.data?.ok
-                  ? oauth.data.data.items.find((i) => i.provider === 'google')
-                  : undefined
-              }
-              onSaved={() =>
-                void queryClient.invalidateQueries({
-                  queryKey: ['admin-oauth'],
-                })
-              }
-            />
-            <OAuthEditor
-              key={`github-${oauth.data?.ok ? (oauth.data.data.items.find((i) => i.provider === 'github')?.clientId ?? '') : ''}`}
-              provider="github"
-              label="GitHub"
-              callbackBase={oauth.data?.ok ? oauth.data.data.callbackBase : ''}
-              initial={
-                oauth.data?.ok
-                  ? oauth.data.data.items.find((i) => i.provider === 'github')
-                  : undefined
-              }
-              onSaved={() =>
-                void queryClient.invalidateQueries({
-                  queryKey: ['admin-oauth'],
-                })
-              }
-            />
+            {oauthItems.map((item) => (
+              <OAuthEditor
+                key={`${item.provider}-${item.clientId}-${item.issuer}`}
+                provider={item.provider}
+                label={providerLabel(item.provider)}
+                callbackBase={callbackBase}
+                initial={item}
+                onSaved={() =>
+                  void queryClient.invalidateQueries({
+                    queryKey: ['admin-oauth'],
+                  })
+                }
+              />
+            ))}
           </div>
         </TabPanel>
       </Tabs>
@@ -567,14 +557,24 @@ function OAuthEditor({
   initial,
   onSaved,
 }: {
-  provider: 'google' | 'github'
+  provider: ManagedProvider
   label: string
   callbackBase: string
-  initial?: { enabled: boolean; clientId: string; hasSecret: boolean }
+  initial?: {
+    enabled: boolean
+    clientId: string
+    issuer: string
+    scopes: string
+    hasSecret: boolean
+    source: 'db' | 'env' | 'none'
+  }
   onSaved: () => void
 }) {
+  const oidc = isOidcProvider(provider)
   const [enabled, setEnabled] = useState(initial?.enabled ?? false)
   const [clientId, setClientId] = useState(initial?.clientId ?? '')
+  const [issuer, setIssuer] = useState(initial?.issuer ?? '')
+  const [scopes, setScopes] = useState(initial?.scopes ?? '')
   const [clientSecret, setClientSecret] = useState('')
 
   const save = useMutation({
@@ -584,6 +584,8 @@ function OAuthEditor({
           provider,
           enabled,
           clientId,
+          issuer,
+          scopes,
           ...(clientSecret ? { clientSecret } : {}),
         },
       }),
@@ -611,11 +613,25 @@ function OAuthEditor({
           <span className="text-caption-1-regular text-text-tertiary">
             回调地址：{callback}
           </span>
+          {initial?.source === 'env' ? (
+            <span className="text-caption-1-regular text-text-tertiary">
+              当前由 OIDC_* 环境变量提供，保存后以这里为准
+            </span>
+          ) : null}
         </div>
         <Switch size="sm" isSelected={enabled} onChange={setEnabled}>
           启用
         </Switch>
       </div>
+      {oidc ? (
+        <Input
+          label="Issuer"
+          placeholder="https://sb.sb/oidc"
+          value={issuer}
+          onChange={setIssuer}
+          hint="其余端点由 <issuer>/.well-known/openid-configuration 自动发现"
+        />
+      ) : null}
       <div className="grid gap-4 sm:grid-cols-2">
         <Input label="Client ID" value={clientId} onChange={setClientId} />
         <Input
@@ -626,6 +642,15 @@ function OAuthEditor({
           onChange={setClientSecret}
         />
       </div>
+      {oidc ? (
+        <Input
+          label="Scopes"
+          placeholder={DEFAULT_OIDC_SCOPES}
+          value={scopes}
+          onChange={setScopes}
+          hint="留空使用默认值；没有 email 就取不到登录邮箱"
+        />
+      ) : null}
       <div className="flex justify-end">
         <Button
           variant="secondary"

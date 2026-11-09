@@ -299,6 +299,8 @@ export const oauthProviders = sqliteTable('oauth_providers', {
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
   clientId: text('client_id'),
   clientSecretEnc: text('client_secret_enc'),
+  /** OIDC issuer, e.g. `https://sb.sb/oidc`. Built-in providers leave it null. */
+  issuer: text('issuer'),
   scopes: text('scopes'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),

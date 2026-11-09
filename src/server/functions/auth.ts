@@ -3,8 +3,8 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import { db } from '#/db'
-import { oauthProviders, user } from '#/db/schema'
-import { resetAuthCache } from '#/lib/auth'
+import { user } from '#/db/schema'
+import { getEnabledProviderIds, resetAuthCache } from '#/lib/auth'
 import { AppError, assert, run } from '../result'
 import { getSession, requireUser } from '../session'
 import { getSiteConfig } from '../settings'
@@ -30,7 +30,7 @@ export const fetchPublicConfig = createServerFn({ method: 'GET' }).handler(
   async () => {
     const [site, providers] = await Promise.all([
       getSiteConfig(),
-      db.select().from(oauthProviders).where(eq(oauthProviders.enabled, true)),
+      getEnabledProviderIds(),
     ])
 
     return {
@@ -40,9 +40,7 @@ export const fetchPublicConfig = createServerFn({ method: 'GET' }).handler(
       footerText: site.footerText,
       registrationEnabled: site.registrationEnabled,
       emailPasswordEnabled: site.emailPasswordEnabled,
-      providers: providers
-        .filter((row) => row.clientId && row.clientSecretEnc)
-        .map((row) => row.provider),
+      providers,
     }
   },
 )

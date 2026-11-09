@@ -1,37 +1,109 @@
 import { betterAuth } from 'better-auth'
 import { APIError } from 'better-auth/api'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { admin } from 'better-auth/plugins'
+import { admin, genericOAuth } from 'better-auth/plugins'
+import type { GenericOAuthConfig } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
-import { count, eq } from 'drizzle-orm'
+import { count } from 'drizzle-orm'
 
 import { db } from '#/db'
 import * as schema from '#/db/schema'
+import {
+  BUILTIN_PROVIDERS,
+  DEFAULT_OIDC_SCOPES,
+  discoveryUrl,
+  OIDC_PROVIDER_IDS,
+  parseScopes,
+} from '#/lib/oauth-providers'
 import { decryptSecret } from '#/server/crypto'
 import { sendSystemMail } from '#/server/services/system-mail'
 import { getSetting } from '#/server/settings'
 
-type Providers = Record<string, { clientId: string; clientSecret: string }>
+type ProviderRow = typeof schema.oauthProviders.$inferSelect
+type SocialProviders = Record<
+  string,
+  { clientId: string; clientSecret: string }
+>
 
-async function loadSocialProviders(): Promise<Providers> {
-  const rows = await db
-    .select()
-    .from(schema.oauthProviders)
-    .where(eq(schema.oauthProviders.enabled, true))
+type Providers = {
+  /** Providers Better Auth knows natively (Google, GitHub). */
+  social: SocialProviders
+  /** Standard OIDC providers, resolved from their issuer. */
+  oidc: GenericOAuthConfig[]
+  /** Every provider a visitor can sign in with, in configuration order. */
+  ids: string[]
+}
 
-  const providers: Providers = {}
-  for (const row of rows) {
-    if (!row.clientId || !row.clientSecretEnc) continue
-    try {
-      providers[row.provider] = {
-        clientId: row.clientId,
-        clientSecret: decryptSecret(row.clientSecretEnc),
-      }
-    } catch {
-      // A rotated encryption key should not take the whole auth endpoint down.
-    }
+function secretOf(row: ProviderRow | undefined): string | null {
+  if (!row?.clientSecretEnc) return null
+  try {
+    return decryptSecret(row.clientSecretEnc)
+  } catch {
+    // A rotated encryption key should not take the whole auth endpoint down.
+    return null
   }
-  return providers
+}
+
+function fromRow(
+  provider: string,
+  row: ProviderRow,
+): GenericOAuthConfig | null {
+  if (!row.enabled || !row.clientId || !row.issuer) return null
+  const scopes = parseScopes(row.scopes)
+  return {
+    providerId: provider,
+    clientId: row.clientId,
+    clientSecret: secretOf(row) ?? undefined,
+    discoveryUrl: discoveryUrl(row.issuer),
+    scopes: scopes.length > 0 ? scopes : parseScopes(DEFAULT_OIDC_SCOPES),
+    pkce: true,
+  }
+}
+
+/**
+ * `OIDC_*` is the deployment-time form of the same configuration, used only
+ * while no row has been saved for the provider. Saving the provider in the
+ * admin UI — including switching it off — takes precedence from then on.
+ */
+function fromEnv(provider: string): GenericOAuthConfig | null {
+  const issuer = process.env.OIDC_ISSUER?.trim()
+  const clientId = process.env.OIDC_CLIENT_ID?.trim()
+  if (!issuer || !clientId) return null
+  return {
+    providerId: provider,
+    clientId,
+    clientSecret: process.env.OIDC_CLIENT_SECRET?.trim() || undefined,
+    discoveryUrl: discoveryUrl(issuer),
+    redirectURI: process.env.OIDC_REDIRECT_URI?.trim() || undefined,
+    scopes: parseScopes(process.env.OIDC_SCOPES ?? DEFAULT_OIDC_SCOPES),
+    pkce: true,
+  }
+}
+
+async function loadProviders(): Promise<Providers> {
+  const rows = await db.select().from(schema.oauthProviders)
+  const byId = new Map(rows.map((row) => [row.provider, row]))
+
+  const social: SocialProviders = {}
+  for (const provider of BUILTIN_PROVIDERS) {
+    const row = byId.get(provider)
+    const clientSecret = secretOf(row)
+    if (!row?.enabled || !row.clientId || !clientSecret) continue
+    social[provider] = { clientId: row.clientId, clientSecret }
+  }
+
+  const oidc: GenericOAuthConfig[] = []
+  for (const provider of OIDC_PROVIDER_IDS) {
+    const row = byId.get(provider)
+    const config = row ? fromRow(provider, row) : fromEnv(provider)
+    if (config) oidc.push(config)
+  }
+
+  return {
+    social,
+    oidc,
+    ids: [...Object.keys(social), ...oidc.map((config) => config.providerId)],
+  }
 }
 
 function createAuth(providers: Providers, emailPasswordEnabled: boolean) {
@@ -49,6 +121,22 @@ function createAuth(providers: Providers, emailPasswordEnabled: boolean) {
     session: {
       expiresIn: 60 * 60 * 24 * 30,
       updateAge: 60 * 60 * 24,
+      // Read as "the session is fresh for its whole life". Sessions last a
+      // month here, so the 24-hour default only made unlinking a third-party
+      // account fail on every already-signed-in browser.
+      freshAge: 0,
+    },
+    account: {
+      accountLinking: {
+        enabled: true,
+        // Local accounts never verify their email address, so requiring that
+        // would block every existing user from adopting a third-party login.
+        requireLocalEmailVerified: false,
+        // A linked account is chosen deliberately by a signed-in user; its
+        // address does not have to match the login address.
+        allowDifferentEmails: true,
+        trustedProviders: providers.ids,
+      },
     },
     emailAndPassword: {
       enabled: emailPasswordEnabled,
@@ -81,8 +169,14 @@ function createAuth(providers: Providers, emailPasswordEnabled: boolean) {
         },
       },
     },
-    socialProviders: providers,
-    plugins: [admin(), tanstackStartCookies()],
+    socialProviders: providers.social,
+    plugins: [
+      ...(providers.oidc.length > 0
+        ? [genericOAuth({ config: providers.oidc })]
+        : []),
+      admin(),
+      tanstackStartCookies(),
+    ],
   })
 }
 
@@ -95,7 +189,7 @@ let cached: { key: string; auth: AuthInstance } | null = null
  * rebuilt whenever that configuration changes (checked per request, cached).
  */
 export async function getAuth(): Promise<AuthInstance> {
-  const providers = await loadSocialProviders()
+  const providers = await loadProviders()
   const enabled = await getSetting('auth.emailPasswordEnabled')
   const key = JSON.stringify({ providers, enabled })
 
@@ -106,6 +200,11 @@ export async function getAuth(): Promise<AuthInstance> {
 
   cached = next
   return next.auth
+}
+
+/** Provider ids a visitor can pick on the login screen. */
+export async function getEnabledProviderIds(): Promise<string[]> {
+  return (await loadProviders()).ids
 }
 
 export function resetAuthCache() {
