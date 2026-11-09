@@ -27,6 +27,7 @@ import { toast } from '@/components/base/toast/toast'
 import { EmptyState, PageHeader } from '@/components/app/page-header'
 import { countdown, formatRelative } from '@/lib/format'
 import { headTitle } from '@/lib/site'
+import { randomTempLocalPart } from '@/lib/temp-address'
 import {
   createMailboxFn,
   deleteMailboxFn,
@@ -39,14 +40,6 @@ export const Route = createFileRoute('/app/temp')({
   head: headTitle('临时邮箱'),
   component: TempPage,
 })
-
-function randomPrefix(length = 10) {
-  const alphabet = 'abcdefghijkmnpqrstuvwxyz23456789'
-  let value = ''
-  const bytes = crypto.getRandomValues(new Uint8Array(length))
-  for (const byte of bytes) value += alphabet[byte % alphabet.length]
-  return value
-}
 
 function TempPage() {
   const queryClient = useQueryClient()
@@ -130,7 +123,7 @@ function TempPage() {
         <EmptyState
           icon={RiTimeLine}
           title="还没有临时邮箱"
-          description="前缀最短 8 位，用于注册验证、一次性收件等场景。"
+          description="用于注册验证、一次性收件等场景。"
           action={
             <Button
               leadingIcon={RiAddLine}
@@ -256,7 +249,7 @@ function CreateTempModal({
   const queryClient = useQueryClient()
   const defaultDomain =
     domains.find((domain) => domain.isDefault)?.id ?? domains[0]?.id ?? ''
-  const [prefix, setPrefix] = useState(() => randomPrefix())
+  const [prefix, setPrefix] = useState(() => randomTempLocalPart())
   const [domainId, setDomainId] = useState(defaultDomain)
 
   useEffect(() => {
@@ -278,7 +271,7 @@ function CreateTempModal({
         return
       }
       toast.success('临时邮箱已创建', { description: result.data.address })
-      setPrefix(randomPrefix())
+      setPrefix(randomTempLocalPart())
       onOpenChange(false)
       await queryClient.invalidateQueries({ queryKey: ['mailboxes'] })
       await queryClient.invalidateQueries({ queryKey: ['overview'] })
@@ -289,23 +282,20 @@ function CreateTempModal({
     <Modal isOpen={isOpen} onOpenChange={onOpenChange} size="sm">
       {({ close }) => (
         <>
-          <ModalHeader
-            title="创建临时邮箱"
-            description="前缀最短 8 位，默认 1 小时后过期。"
-          />
+          <ModalHeader title="创建临时邮箱" description="默认 1 小时后过期。" />
           <ModalBody className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
               <Input
                 label="前缀"
                 value={prefix}
                 onChange={(value) => setPrefix(value.toLowerCase())}
-                hint="至少 8 位，小写字母与数字"
+                hint="名-姓 + 三位数字，例如 alice-bob123"
               />
               <Button
                 size="xs"
                 variant="ghost"
                 leadingIcon={RiShuffleLine}
-                onClick={() => setPrefix(randomPrefix())}
+                onClick={() => setPrefix(randomTempLocalPart())}
                 className="self-start"
               >
                 换一个随机地址
