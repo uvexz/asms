@@ -1,13 +1,16 @@
-import { and, count, desc, eq } from 'drizzle-orm'
+import { and, count, desc, eq, inArray } from 'drizzle-orm'
 
 import { db } from '#/db'
-import { attachments, mailboxes, messages } from '#/db/schema'
+import { attachments, domains, mailboxes, messages } from '#/db/schema'
 import { deleteObjects } from '../integrations/storage'
 import { assert } from '../result'
+import { formatAddress, isExpired } from './mailboxes'
 
 export type MessageListItem = {
   id: string
   mailboxId: string
+  mailboxAddress: string
+  mailboxKind: 'permanent' | 'temporary'
   fromAddress: string
   fromName: string | null
   subject: string
@@ -53,27 +56,70 @@ async function assertMailboxOwner(userId: string, mailboxId: string) {
   return row
 }
 
+/**
+ * The set of mailboxes a list request may read from. Expired temporary
+ * mailboxes drop out here even before the cleanup cron removes their rows, so
+ * an aggregate view never surfaces mail the user can no longer open.
+ */
+async function resolveMailboxScope(
+  userId: string,
+  mailboxId?: string,
+): Promise<string[]> {
+  if (mailboxId) {
+    const row = await assertMailboxOwner(userId, mailboxId)
+    assert(row.status === 'active', 'MAILBOX_DISABLED', '邮箱已停用')
+    assert(!isExpired(row), 'MAILBOX_EXPIRED', '临时邮箱已过期')
+    return [row.id]
+  }
+
+  const rows = await db
+    .select({
+      id: mailboxes.id,
+      kind: mailboxes.kind,
+      expiresAt: mailboxes.expiresAt,
+    })
+    .from(mailboxes)
+    .where(and(eq(mailboxes.userId, userId), eq(mailboxes.status, 'active')))
+
+  return rows.filter((row) => !isExpired(row)).map((row) => row.id)
+}
+
 export async function listMessages(input: {
   userId: string
-  mailboxId: string
+  /** Omit to list messages across every active mailbox of the user. */
+  mailboxId?: string
   page?: number
   pageSize?: number
   unreadOnly?: boolean
 }) {
-  await assertMailboxOwner(input.userId, input.mailboxId)
-
   const page = Math.max(1, input.page ?? 1)
   const pageSize = Math.min(50, Math.max(1, input.pageSize ?? 20))
   const offset = (page - 1) * pageSize
 
+  const mailboxIds = await resolveMailboxScope(input.userId, input.mailboxId)
+  if (mailboxIds.length === 0) {
+    return { items: [], total: 0, page, pageSize, hasMore: false }
+  }
+
+  const scope =
+    mailboxIds.length === 1
+      ? eq(messages.mailboxId, mailboxIds[0])
+      : inArray(messages.mailboxId, mailboxIds)
   const where = input.unreadOnly
-    ? and(eq(messages.mailboxId, input.mailboxId), eq(messages.isRead, false))
-    : eq(messages.mailboxId, input.mailboxId)
+    ? and(scope, eq(messages.isRead, false))
+    : scope
 
   const [rows, totalRow] = await Promise.all([
     db
-      .select()
+      .select({
+        message: messages,
+        localPart: mailboxes.localPart,
+        domain: domains.name,
+        kind: mailboxes.kind,
+      })
       .from(messages)
+      .innerJoin(mailboxes, eq(messages.mailboxId, mailboxes.id))
+      .innerJoin(domains, eq(mailboxes.domainId, domains.id))
       .where(where)
       .orderBy(desc(messages.receivedAt))
       .limit(pageSize)
@@ -82,16 +128,18 @@ export async function listMessages(input: {
   ])
 
   const items: MessageListItem[] = rows.map((row) => ({
-    id: row.id,
-    mailboxId: row.mailboxId,
-    fromAddress: row.fromAddress,
-    fromName: row.fromName,
-    subject: row.subject,
-    snippet: row.snippet,
-    isRead: row.isRead,
-    isStarred: row.isStarred,
-    hasAttachments: row.hasAttachments,
-    receivedAt: row.receivedAt.toISOString(),
+    id: row.message.id,
+    mailboxId: row.message.mailboxId,
+    mailboxAddress: formatAddress(row.localPart, row.domain),
+    mailboxKind: row.kind === 'temporary' ? 'temporary' : 'permanent',
+    fromAddress: row.message.fromAddress,
+    fromName: row.message.fromName,
+    subject: row.message.subject,
+    snippet: row.message.snippet,
+    isRead: row.message.isRead,
+    isStarred: row.message.isStarred,
+    hasAttachments: row.message.hasAttachments,
+    receivedAt: row.message.receivedAt.toISOString(),
   }))
 
   return {
@@ -108,13 +156,19 @@ export async function getMessage(
   messageId: string,
 ): Promise<MessageDetail> {
   const row = await db
-    .select({ message: messages, mailbox: mailboxes })
+    .select({ message: messages, mailbox: mailboxes, domain: domains.name })
     .from(messages)
     .innerJoin(mailboxes, eq(messages.mailboxId, mailboxes.id))
+    .innerJoin(domains, eq(mailboxes.domainId, domains.id))
     .where(and(eq(messages.id, messageId), eq(mailboxes.userId, userId)))
     .get()
 
   assert(row, 'MESSAGE_NOT_FOUND', '邮件不存在')
+  assert(
+    row.mailbox.status === 'active' && !isExpired(row.mailbox),
+    'MESSAGE_NOT_FOUND',
+    '邮件不存在',
+  )
 
   const files = await db
     .select()
@@ -124,6 +178,8 @@ export async function getMessage(
   return {
     id: row.message.id,
     mailboxId: row.message.mailboxId,
+    mailboxAddress: formatAddress(row.mailbox.localPart, row.domain),
+    mailboxKind: row.mailbox.kind === 'temporary' ? 'temporary' : 'permanent',
     fromAddress: row.message.fromAddress,
     fromName: row.message.fromName,
     subject: row.message.subject,

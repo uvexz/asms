@@ -27,6 +27,7 @@ export type MailboxDto = {
   expiresAt: string | null
   renewCount: number
   lastReceivedAt: string | null
+  unread: number
   createdAt: string
 }
 
@@ -56,6 +57,7 @@ export function stripPlusTag(localPart: string) {
 export function serializeMailbox(
   row: MailboxRow,
   domainName: string,
+  unread = 0,
 ): MailboxDto {
   return {
     id: row.id,
@@ -71,6 +73,7 @@ export function serializeMailbox(
     lastReceivedAt: row.lastReceivedAt
       ? row.lastReceivedAt.toISOString()
       : null,
+    unread,
     createdAt: row.createdAt.toISOString(),
   }
 }
@@ -165,9 +168,35 @@ export async function listMailboxes(userId: string): Promise<MailboxDto[]> {
     .where(eq(mailboxes.userId, userId))
     .orderBy(desc(mailboxes.createdAt))
 
-  return rows
-    .filter((row) => !isExpired(row.mailbox) && row.mailbox.status === 'active')
-    .map((row) => serializeMailbox(row.mailbox, row.domainName))
+  const active = rows.filter(
+    (row) => !isExpired(row.mailbox) && row.mailbox.status === 'active',
+  )
+  if (active.length === 0) return []
+
+  const counts = await db
+    .select({ mailboxId: messages.mailboxId, value: count() })
+    .from(messages)
+    .where(
+      and(
+        inArray(
+          messages.mailboxId,
+          active.map((row) => row.mailbox.id),
+        ),
+        eq(messages.isRead, false),
+      ),
+    )
+    .groupBy(messages.mailboxId)
+  const unreadByMailbox = new Map(
+    counts.map((row) => [row.mailboxId, row.value]),
+  )
+
+  return active.map((row) =>
+    serializeMailbox(
+      row.mailbox,
+      row.domainName,
+      unreadByMailbox.get(row.mailbox.id) ?? 0,
+    ),
+  )
 }
 
 export async function countPermanent(userId: string): Promise<number> {

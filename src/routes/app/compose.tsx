@@ -116,7 +116,7 @@ function ComposePage() {
           icon={RiMailSendLine}
           title="没有可用的发件邮箱"
           description="先创建一个长期邮箱，临时邮箱默认仅支持收件。"
-          action={<ButtonLink href="/app/mailboxes">创建长期邮箱</ButtonLink>}
+          action={<ButtonLink href="/app/mailboxes">创建邮箱</ButtonLink>}
         />
       </div>
     )

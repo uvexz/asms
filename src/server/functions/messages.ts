@@ -13,7 +13,7 @@ import {
 export const listMessagesFn = createServerFn({ method: 'GET' })
   .validator(
     z.object({
-      mailboxId: z.string(),
+      mailboxId: z.string().optional(),
       page: z.number().int().min(1).optional(),
       pageSize: z.number().int().min(1).max(50).optional(),
       unreadOnly: z.boolean().optional(),

@@ -13,7 +13,6 @@ import {
   RiMailSendLine,
   RiMenuLine,
   RiSendPlaneLine,
-  RiTimeLine,
 } from '@remixicon/react'
 
 import { DashboardSidebar } from '@/components/application/dashboard/dashboard-sidebar'
@@ -22,6 +21,7 @@ import { SiteMark } from '@/components/app/site-mark'
 import { Drawer } from '@/components/base/drawer/drawer'
 import { IconButton } from '@/components/base/buttons/icon-button'
 import { authClient } from '@/lib/auth-client'
+import { cx } from '@/utils/cx'
 
 export const Route = createFileRoute('/app')({
   beforeLoad: ({ context }) => {
@@ -40,7 +40,6 @@ const NAV: DashboardNavItem[] = [
     icon: RiInboxLine,
     href: '/app/mailboxes',
   },
-  { key: 'temp', label: '临时邮箱', icon: RiTimeLine, href: '/app/temp' },
   {
     key: 'compose',
     label: '写邮件',
@@ -53,11 +52,11 @@ const NAV: DashboardNavItem[] = [
 function selectedKey(pathname: string) {
   if (
     pathname.startsWith('/app/mailboxes') ||
-    pathname.startsWith('/app/inbox')
+    pathname.startsWith('/app/inbox') ||
+    pathname.startsWith('/app/temp')
   ) {
     return 'mailboxes'
   }
-  if (pathname.startsWith('/app/temp')) return 'temp'
   if (pathname.startsWith('/app/settings')) return 'settings'
   if (pathname.startsWith('/app/compose')) return 'compose'
   if (pathname.startsWith('/app/sent')) return 'sent'
@@ -69,6 +68,8 @@ function AppLayout() {
   const router = useRouter()
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
+  // The mail view is a three-pane client: it needs the full width it can get.
+  const wide = location.pathname.startsWith('/app/mailboxes')
 
   const user = session?.user
   if (!user) return null
@@ -150,7 +151,10 @@ function AppLayout() {
         <main
           id="main-content"
           tabIndex={-1}
-          className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 outline-none lg:px-8 lg:py-8"
+          className={cx(
+            'mx-auto w-full flex-1 px-4 py-6 outline-none lg:px-8 lg:py-8',
+            wide ? 'max-w-none' : 'max-w-6xl',
+          )}
         >
           <Outlet />
         </main>

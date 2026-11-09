@@ -1,7 +1,8 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import {
-  RiArrowRightLine,
+  RiAddLine,
   RiInboxLine,
   RiMailSendLine,
   RiMailUnreadLine,
@@ -9,14 +10,21 @@ import {
 } from '@remixicon/react'
 
 import { Chip } from '@/components/base/badges/chip'
-import { ButtonLink } from '@/components/base/buttons/button'
+import { Button, ButtonLink } from '@/components/base/buttons/button'
 import { Skeleton } from '@/components/base/skeleton/skeleton'
 import { StatCards } from '@/components/application/dashboard/stat-cards'
 import type { Stat } from '@/components/application/dashboard/stat-cards'
+import {
+  CreateMailboxModal,
+  CreateTempMailboxModal,
+} from '@/components/app/mailbox/create-modals'
+import { DomainNotice } from '@/components/app/mailbox/domain-notice'
+import type { MailboxKind } from '@/components/app/mailbox/types'
 import { EmptyState, PageHeader } from '@/components/app/page-header'
 import { formatRelative } from '@/lib/format'
 import { headTitle } from '@/lib/site'
 import { fetchOverview } from '@/server/functions/dashboard'
+import { listDomainsFn } from '@/server/functions/mailboxes'
 
 export const Route = createFileRoute('/app/')({
   head: headTitle('概览'),
@@ -24,11 +32,26 @@ export const Route = createFileRoute('/app/')({
 })
 
 function OverviewPage() {
+  const router = useRouter()
+  const [createKind, setCreateKind] = useState<MailboxKind | null>(null)
   const { data, isLoading } = useQuery({
     queryKey: ['overview'],
     queryFn: () => fetchOverview(),
     refetchInterval: 15_000,
   })
+  const domains = useQuery({
+    queryKey: ['domains'],
+    queryFn: () => listDomainsFn(),
+  })
+
+  const canCreate = domains.data?.ok ? domains.data.data.length > 0 : true
+  const missingDomains = domains.data?.ok && domains.data.data.length === 0
+  const openMailbox = (id: string) => {
+    void router.navigate({
+      to: '/app/mailboxes',
+      search: { mailbox: id, message: undefined },
+    })
+  }
 
   if (isLoading) {
     return (
@@ -93,28 +116,48 @@ function OverviewPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader
-        title="概览"
-        description="邮箱、收件与发件额度一览。"
-        actions={
-          <ButtonLink
-            href="/app/compose"
-            size="small"
-            trailingIcon={RiArrowRightLine}
-          >
-            写邮件
-          </ButtonLink>
-        }
-      />
+      <div className="flex flex-col gap-3">
+        <PageHeader
+          title="概览"
+          description="邮箱、收件与发件额度一览。"
+          actions={
+            <>
+              <Button
+                size="small"
+                variant="secondary"
+                leadingIcon={RiTimeLine}
+                onClick={() => setCreateKind('temporary')}
+                disabled={!canCreate}
+              >
+                创建临时邮箱
+              </Button>
+              <Button
+                size="small"
+                leadingIcon={RiAddLine}
+                onClick={() => setCreateKind('permanent')}
+                disabled={!canCreate}
+              >
+                创建邮箱
+              </Button>
+            </>
+          }
+        />
+        {missingDomains ? <DomainNotice /> : null}
+      </div>
 
       <StatCards variant="footer" stats={stats} columns={4} />
 
       <section className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <h2 className="text-title-3-semibold text-text-primary">最近收件</h2>
-          <ButtonLink href="/app/mailboxes" size="small" variant="ghost">
-            全部邮箱
-          </ButtonLink>
+          <div className="flex items-center gap-1">
+            <ButtonLink href="/app/compose" size="small" variant="ghost">
+              写邮件
+            </ButtonLink>
+            <ButtonLink href="/app/mailboxes" size="small" variant="ghost">
+              全部邮箱
+            </ButtonLink>
+          </div>
         </div>
 
         {overview.recent.length === 0 ? (
@@ -122,16 +165,22 @@ function OverviewPage() {
             icon={RiInboxLine}
             title="还没有收到邮件"
             description="创建一个邮箱后，把地址留给对方，新邮件会自动出现在这里。"
-            action={<ButtonLink href="/app/mailboxes">创建邮箱</ButtonLink>}
+            action={
+              <Button
+                onClick={() => setCreateKind('permanent')}
+                disabled={!canCreate}
+              >
+                创建邮箱
+              </Button>
+            }
           />
         ) : (
           <div className="divide-y divide-separator-border overflow-hidden rounded-3xl border border-border-button-default bg-background-primary-default">
             {overview.recent.map((item) => (
               <Link
                 key={item.id}
-                to="/app/inbox/$mailboxId"
-                params={{ mailboxId: item.mailboxId }}
-                search={{ message: item.id }}
+                to="/app/mailboxes"
+                search={{ mailbox: item.mailboxId, message: item.id }}
                 className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-background-secondary-hover"
               >
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-background-secondary-default text-caption-1-semibold text-text-secondary">
@@ -163,6 +212,21 @@ function OverviewPage() {
           </div>
         )}
       </section>
+
+      <CreateMailboxModal
+        isOpen={createKind === 'permanent'}
+        onOpenChange={(open) => {
+          if (!open) setCreateKind(null)
+        }}
+        onCreated={(mailbox) => openMailbox(mailbox.id)}
+      />
+      <CreateTempMailboxModal
+        isOpen={createKind === 'temporary'}
+        onOpenChange={(open) => {
+          if (!open) setCreateKind(null)
+        }}
+        onCreated={(mailbox) => openMailbox(mailbox.id)}
+      />
     </div>
   )
 }
