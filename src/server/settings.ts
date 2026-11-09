@@ -4,22 +4,85 @@ import { db } from '#/db'
 import { settings } from '#/db/schema'
 import { decryptSecret, encryptSecret, maskSecret } from './crypto'
 
+/**
+ * Role addresses a personal mailbox may never claim: RFC 2142 requires the
+ * first group to stay reachable, the second is what a stranger guesses when
+ * they need the organisation, and the rest are emitted by mail software or
+ * reserved for protocol endpoints. Matching ignores case and `._-`, so
+ * `No_Reply` collides with `noreply` as well.
+ */
 const DEFAULT_RESERVED = [
-  'admin',
-  'administrator',
+  // RFC 2142
   'postmaster',
+  'abuse',
   'hostmaster',
   'webmaster',
-  'abuse',
-  'root',
   'security',
-  'support',
+  'noc',
+  // 职能信箱
+  'admin',
+  'administrator',
+  'sysadmin',
+  'root',
   'system',
-  'mailer-daemon',
-  'no-reply',
+  'operator',
+  'info',
+  'contact',
+  'support',
+  'help',
+  'helpdesk',
+  'billing',
+  'payments',
+  'invoice',
+  'accounts',
+  'finance',
+  'legal',
+  'privacy',
+  'dpo',
+  'compliance',
+  'feedback',
+  'press',
+  'marketing',
+  'sales',
+  'jobs',
+  'hr',
+  // 机器信箱
   'noreply',
+  'donotreply',
   'bounce',
   'bounces',
+  'mailer-daemon',
+  'mailer',
+  'postfix',
+  'mail',
+  'email',
+  'notifications',
+  'notify',
+  'alerts',
+  'newsletter',
+  'subscribe',
+  'unsubscribe',
+  // 协议与服务端点
+  'smtp',
+  'imap',
+  'pop3',
+  'webmail',
+  'autodiscover',
+  'autoconfig',
+  'caldav',
+  'carddav',
+  'ns',
+  'ns1',
+  'ns2',
+  'dns',
+  'dmarc',
+  'dkim',
+  'spf',
+  'api',
+  'www',
+  'cdn',
+  'static',
+  'status',
 ]
 
 export const SETTING_DEFS = {

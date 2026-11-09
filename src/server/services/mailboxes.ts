@@ -82,6 +82,12 @@ export function isExpired(row: { kind: string; expiresAt: Date | null }) {
   )
 }
 
+/** Reserved words ignore case and `._-`, so `no.reply` cannot slip past `noreply`. */
+function isReserved(localPart: string, reserved: string[]) {
+  const target = localPart.replace(/[^a-z0-9]/g, '')
+  return reserved.some((word) => word.replace(/[^a-z0-9]/g, '') === target)
+}
+
 function validateLocalPart(
   localPart: string,
   kind: 'permanent' | 'temporary',
@@ -90,22 +96,24 @@ function validateLocalPart(
   const min =
     kind === 'permanent' ? policy.minPrefixPermanent : policy.minPrefixTemp
 
-  assert(localPart.length >= min, 'PREFIX_TOO_SHORT', `前缀至少 ${min} 位`)
-  assert(
-    localPart.length <= policy.maxPrefixLength,
-    'PREFIX_TOO_LONG',
-    `前缀最多 ${policy.maxPrefixLength} 位`,
-  )
   assert(
     /^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/.test(localPart),
     'PREFIX_INVALID',
     '前缀只能包含小写字母、数字、点、下划线和连字符，且需以字母或数字开头结尾',
   )
   assert(!localPart.includes('..'), 'PREFIX_INVALID', '前缀不能包含连续的点')
+  // Reserved wins over the length rules: `billing` is a reserved word in every
+  // kind, and saying so is more useful than pointing at the minimum length.
   assert(
-    !policy.reservedPrefixes.includes(localPart),
+    !isReserved(localPart, policy.reservedPrefixes),
     'PREFIX_RESERVED',
     '该前缀为系统保留字，请更换',
+  )
+  assert(localPart.length >= min, 'PREFIX_TOO_SHORT', `前缀至少 ${min} 位`)
+  assert(
+    localPart.length <= policy.maxPrefixLength,
+    'PREFIX_TOO_LONG',
+    `前缀最多 ${policy.maxPrefixLength} 位`,
   )
 }
 
