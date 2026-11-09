@@ -22,11 +22,9 @@ import { toast } from '@/components/base/toast/toast'
 import { EmptyState, PageHeader } from '@/components/app/page-header'
 import { TablePagination } from '@/components/app/table-pagination'
 import { formatFullDateTime } from '@/lib/format'
+import { adminMailboxesQuery, queryKeys } from '@/lib/queries'
 import { headTitle } from '@/lib/site'
-import {
-  adminDeleteMailboxFn,
-  adminMailboxesFn,
-} from '@/server/functions/admin'
+import { adminDeleteMailboxFn } from '@/server/functions/admin'
 
 const PAGE_SIZE = 20
 
@@ -44,16 +42,9 @@ function AdminMailboxesPage() {
     address: string
   } | null>(null)
 
-  const list = useQuery({
-    queryKey: ['admin-mailboxes', kind, page],
-    queryFn: () =>
-      adminMailboxesFn({
-        data: {
-          kind: kind === 'all' ? undefined : kind,
-          page,
-        },
-      }),
-  })
+  const list = useQuery(
+    adminMailboxesQuery({ kind: kind === 'all' ? undefined : kind, page }),
+  )
 
   const remove = useMutation({
     mutationFn: (id: string) => adminDeleteMailboxFn({ data: { id } }),
@@ -63,8 +54,10 @@ function AdminMailboxesPage() {
         return
       }
       toast.success('邮箱已删除')
-      await queryClient.invalidateQueries({ queryKey: ['admin-mailboxes'] })
-      await queryClient.invalidateQueries({ queryKey: ['admin-overview'] })
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.adminMailboxes,
+      })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.adminOverview })
     },
   })
 
@@ -132,7 +125,9 @@ function AdminMailboxesPage() {
                       过期时间
                     </span>
                     <span className="text-caption-1-regular text-text-secondary">
-                      {item.expiresAt ? formatFullDateTime(item.expiresAt) : '长期'}
+                      {item.expiresAt
+                        ? formatFullDateTime(item.expiresAt)
+                        : '长期'}
                     </span>
                   </div>
                   <div className="flex flex-col gap-1">
@@ -190,7 +185,9 @@ function AdminMailboxesPage() {
                     </TableCell>
                     <TableCell>{item.ownerEmail}</TableCell>
                     <TableCell>
-                      {item.expiresAt ? formatFullDateTime(item.expiresAt) : '—'}
+                      {item.expiresAt
+                        ? formatFullDateTime(item.expiresAt)
+                        : '—'}
                     </TableCell>
                     <TableCell>
                       <span className="text-caption-1-regular text-text-tertiary">

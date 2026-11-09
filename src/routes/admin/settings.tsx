@@ -16,12 +16,16 @@ import {
   providerLabel,
 } from '@/lib/oauth-providers'
 import type { ManagedProvider } from '@/lib/oauth-providers'
+import {
+  adminOAuthQuery,
+  adminSettingsQuery,
+  invalidateSettings,
+  queryKeys,
+} from '@/lib/queries'
 import { headTitle } from '@/lib/site'
 import {
-  adminOAuthFn,
   adminSaveOAuthFn,
   adminSaveSettingsFn,
-  adminSettingsFn,
   adminTestResendFn,
 } from '@/server/functions/admin'
 
@@ -43,14 +47,8 @@ function AdminSettingsPage() {
   const [tab, setTab] = useState('site')
   const [draft, setDraft] = useState<Record<string, unknown>>({})
 
-  const settings = useQuery({
-    queryKey: ['admin-settings'],
-    queryFn: () => adminSettingsFn(),
-  })
-  const oauth = useQuery({
-    queryKey: ['admin-oauth'],
-    queryFn: () => adminOAuthFn(),
-  })
+  const settings = useQuery(adminSettingsQuery())
+  const oauth = useQuery(adminOAuthQuery())
 
   const rows = settings.data?.ok ? settings.data.data.rows : []
   const oauthItems = oauth.data?.ok ? oauth.data.data.items : []
@@ -89,7 +87,7 @@ function AdminSettingsPage() {
         }
         return next
       })
-      await queryClient.invalidateQueries({ queryKey: ['admin-settings'] })
+      await invalidateSettings(queryClient)
       // The document title, sidebar and logo all read the root route's
       // context, so the shell has to re-run before the new brand shows.
       await router.invalidate()
@@ -463,7 +461,7 @@ function AdminSettingsPage() {
                 initial={item}
                 onSaved={() =>
                   void queryClient.invalidateQueries({
-                    queryKey: ['admin-oauth'],
+                    queryKey: queryKeys.adminOAuth,
                   })
                 }
               />

@@ -11,9 +11,13 @@ import { Skeleton } from '@/components/base/skeleton/skeleton'
 import { Textarea } from '@/components/base/textarea/textarea'
 import { toast } from '@/components/base/toast/toast'
 import { EmptyState, PageHeader } from '@/components/app/page-header'
+import {
+  invalidateAfterSend,
+  mailboxesQuery,
+  sendUsageQuery,
+} from '@/lib/queries'
 import { headTitle } from '@/lib/site'
-import { listMailboxesFn } from '@/server/functions/mailboxes'
-import { sendMailFn, sendUsageFn } from '@/server/functions/send'
+import { sendMailFn } from '@/server/functions/send'
 
 export const Route = createFileRoute('/app/compose')({
   head: headTitle('写邮件'),
@@ -41,14 +45,8 @@ function ComposePage() {
     body?: string
   }>({})
 
-  const mailboxes = useQuery({
-    queryKey: ['mailboxes'],
-    queryFn: () => listMailboxesFn(),
-  })
-  const usage = useQuery({
-    queryKey: ['send-usage'],
-    queryFn: () => sendUsageFn(),
-  })
+  const mailboxes = useQuery(mailboxesQuery())
+  const usage = useQuery(sendUsageQuery())
 
   const usable = (mailboxes.data?.ok ? mailboxes.data.data : []).filter(
     (item) => item.kind === 'permanent',
@@ -93,9 +91,7 @@ function ComposePage() {
       setBcc('')
       setSubject('')
       setBody('')
-      await queryClient.invalidateQueries({ queryKey: ['send-usage'] })
-      await queryClient.invalidateQueries({ queryKey: ['sent'] })
-      await queryClient.invalidateQueries({ queryKey: ['overview'] })
+      await invalidateAfterSend(queryClient)
     },
   })
 
@@ -164,7 +160,8 @@ function ComposePage() {
             value={to}
             onChange={(value) => {
               setTo(value)
-              if (errors.to) setErrors((current) => ({ ...current, to: undefined }))
+              if (errors.to)
+                setErrors((current) => ({ ...current, to: undefined }))
             }}
             isInvalid={Boolean(errors.to)}
             errorMessage={errors.to}
@@ -197,11 +194,14 @@ function ComposePage() {
           value={body}
           onChange={(value) => {
             setBody(value)
-            if (errors.body) setErrors((current) => ({ ...current, body: undefined }))
+            if (errors.body)
+              setErrors((current) => ({ ...current, body: undefined }))
           }}
           hint={errors.body}
           isInvalid={Boolean(errors.body)}
-          fieldClassName={errors.body ? '!bg-background-secondary-default' : undefined}
+          fieldClassName={
+            errors.body ? '!bg-background-secondary-default' : undefined
+          }
           rows={12}
           isRequired
         />

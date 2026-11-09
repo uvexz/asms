@@ -47,3 +47,14 @@ This project uses BoardUI (React + Tailwind CSS v4, source-owned components unde
 
 When unsure about a token, a component's API, or working example code, ask the BoardUI MCP server: `get_theme`, `get_component`, `get_usage_examples`.
 <!-- boardui:rules:end -->
+
+# Data fetching
+
+Every server read that a screen keeps mounted goes through `@/lib/queries`. Nothing else calls a read server function from a component.
+
+- **Never write an inline `queryKey`.** Add a factory to `src/lib/queries.ts` and read the key from `queryKeys`. Keys are namespaced `['mail', …]` and `['admin', …]`, so one `invalidateQueries` covers a whole area.
+- **Pick a staleness tier, don't invent a number**: `STALE_TIME.live` (data that arrives on its own, the poll owns freshness), `STALE_TIME.user` (changes when the user acts), `STALE_TIME.reference` (configuration and anything immutable). Polling cadences live in `REFRESH_INTERVAL`.
+- **Invalidate through the helpers** (`invalidateMailData`, `invalidateAfterSend`, `invalidateDomains`, `invalidateSettings`). A mutation that writes has to name the caches it staled; matching keys by hand is how they drift apart.
+- **Prefer patching the cache to refetching it** when a write changes one field the client can already compute — see the read flag in `app/mailboxes.tsx`. Refetch when the value is a sum the server owns (unread counts).
+- `fetchShell` stays in the router context on purpose: it is the session, read once per document and re-read on `router.invalidate()`. Do not move it into the query cache.
+- Sign out through `useSignOut()` — it drops the whole query cache, because `['mail', …]` belongs to the account that just left.

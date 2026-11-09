@@ -17,8 +17,8 @@ import { EmptyState, PageHeader } from '@/components/app/page-header'
 import { TablePagination } from '@/components/app/table-pagination'
 import { formatRecipients, ingestResultLabel } from '@/lib/admin-labels'
 import { formatFullDateTime } from '@/lib/format'
+import { adminIngestQuery } from '@/lib/queries'
 import { headTitle } from '@/lib/site'
-import { adminIngestFn } from '@/server/functions/admin'
 
 const PAGE_SIZE = 30
 
@@ -39,10 +39,7 @@ const RESULT_COLOR: Record<string, ChipColor> = {
 function AdminIngestPage() {
   const [page, setPage] = useState(1)
 
-  const list = useQuery({
-    queryKey: ['admin-ingest', page],
-    queryFn: () => adminIngestFn({ data: { page } }),
-  })
+  const list = useQuery(adminIngestQuery(page))
 
   const items = list.data?.ok ? list.data.data.items : []
   const total = list.data?.ok ? list.data.data.total : 0

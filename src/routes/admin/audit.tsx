@@ -16,8 +16,8 @@ import { EmptyState, PageHeader } from '@/components/app/page-header'
 import { TablePagination } from '@/components/app/table-pagination'
 import { auditActionLabel, auditTargetLabel } from '@/lib/admin-labels'
 import { formatFullDateTime } from '@/lib/format'
+import { adminAuditQuery } from '@/lib/queries'
 import { headTitle } from '@/lib/site'
-import { adminAuditFn } from '@/server/functions/admin'
 
 const PAGE_SIZE = 30
 
@@ -29,10 +29,7 @@ export const Route = createFileRoute('/admin/audit')({
 function AdminAuditPage() {
   const [page, setPage] = useState(1)
 
-  const list = useQuery({
-    queryKey: ['admin-audit', page],
-    queryFn: () => adminAuditFn({ data: { page } }),
-  })
+  const list = useQuery(adminAuditQuery(page))
 
   const items = list.data?.ok ? list.data.data.items : []
   const total = list.data?.ok ? list.data.data.total : 0

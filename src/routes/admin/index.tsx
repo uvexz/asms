@@ -14,8 +14,8 @@ import { StatCards } from '@/components/application/dashboard/stat-cards'
 import type { Stat } from '@/components/application/dashboard/stat-cards'
 import { EmptyState, PageHeader } from '@/components/app/page-header'
 import { domainStatusLabel } from '@/lib/admin-labels'
+import { adminOverviewQuery } from '@/lib/queries'
 import { headTitle } from '@/lib/site'
-import { adminOverviewFn } from '@/server/functions/admin'
 
 export const Route = createFileRoute('/admin/')({
   head: headTitle('管理概览'),
@@ -23,11 +23,7 @@ export const Route = createFileRoute('/admin/')({
 })
 
 function AdminOverview() {
-  const { data, isLoading } = useQuery({
-    queryKey: ['admin-overview'],
-    queryFn: () => adminOverviewFn(),
-    refetchInterval: 30_000,
-  })
+  const { data, isLoading } = useQuery(adminOverviewQuery())
 
   if (isLoading) {
     return (

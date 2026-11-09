@@ -24,8 +24,7 @@ import type { MailboxKind } from '@/components/app/mailbox/types'
 import { EmptyState, PageHeader } from '@/components/app/page-header'
 import { formatRelative } from '@/lib/format'
 import { headTitle } from '@/lib/site'
-import { fetchOverview } from '@/server/functions/dashboard'
-import { listDomainsFn } from '@/server/functions/mailboxes'
+import { domainsQuery, overviewQuery } from '@/lib/queries'
 
 export const Route = createFileRoute('/app/')({
   head: headTitle('概览'),
@@ -35,15 +34,8 @@ export const Route = createFileRoute('/app/')({
 function OverviewPage() {
   const router = useRouter()
   const [createKind, setCreateKind] = useState<MailboxKind | null>(null)
-  const { data, isLoading } = useQuery({
-    queryKey: ['overview'],
-    queryFn: () => fetchOverview(),
-    refetchInterval: 15_000,
-  })
-  const domains = useQuery({
-    queryKey: ['domains'],
-    queryFn: () => listDomainsFn(),
-  })
+  const { data, isLoading } = useQuery(overviewQuery())
+  const domains = useQuery(domainsQuery())
 
   const canCreate = domains.data?.ok ? domains.data.data.length > 0 : true
   const missingDomains = domains.data?.ok && domains.data.data.length === 0

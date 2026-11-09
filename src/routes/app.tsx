@@ -21,7 +21,7 @@ import type { DashboardNavItem } from '@/components/application/dashboard/dashbo
 import { SiteMark } from '@/components/app/site-mark'
 import { Drawer } from '@/components/base/drawer/drawer'
 import { IconButton } from '@/components/base/buttons/icon-button'
-import { authClient } from '@/lib/auth-client'
+import { useSignOut } from '@/lib/use-sign-out'
 import { cx } from '@/utils/cx'
 
 export const Route = createFileRoute('/app')({
@@ -74,6 +74,7 @@ function AppLayout() {
   const { session, site } = Route.useRouteContext()
   const router = useRouter()
   const location = useLocation()
+  const signOut = useSignOut()
   const [mobileOpen, setMobileOpen] = useState(false)
   // 抽屉里的导航都是真实跳转，路径一变就把抽屉收起来。
   useEffect(() => {
@@ -84,12 +85,6 @@ function AppLayout() {
 
   const user = session?.user
   if (!user) return null
-
-  const signOut = async () => {
-    await authClient.signOut()
-    await router.invalidate()
-    await router.navigate({ to: '/login' })
-  }
 
   const sidebar = (
     <DashboardSidebar

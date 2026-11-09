@@ -23,10 +23,10 @@ import { Switch } from '@/components/base/switch/switch'
 import { toast } from '@/components/base/toast/toast'
 import { EmptyState, PageHeader } from '@/components/app/page-header'
 import { domainStatusLabel } from '@/lib/admin-labels'
+import { adminDomainsQuery, invalidateDomains } from '@/lib/queries'
 import { headTitle } from '@/lib/site'
 import {
   adminAddDomainFn,
-  adminDomainsFn,
   adminRefreshDomainFn,
   adminRemoveDomainFn,
   adminSetDefaultDomainFn,
@@ -64,15 +64,10 @@ function AdminDomainsPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [removing, setRemoving] = useState<string | null>(null)
 
-  const list = useQuery({
-    queryKey: ['admin-domains'],
-    queryFn: () => adminDomainsFn(),
-  })
+  const list = useQuery(adminDomainsQuery())
 
   const refreshAll = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['admin-domains'] })
-    await queryClient.invalidateQueries({ queryKey: ['admin-overview'] })
-    await queryClient.invalidateQueries({ queryKey: ['domains'] })
+    await invalidateDomains(queryClient)
   }
 
   const verify = useMutation({

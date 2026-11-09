@@ -80,7 +80,7 @@ function fromEnv(provider: string): GenericOAuthConfig | null {
   }
 }
 
-async function loadProviders(): Promise<Providers> {
+async function readProviders(): Promise<Providers> {
   const rows = await db.select().from(schema.oauthProviders)
   const byId = new Map(rows.map((row) => [row.provider, row]))
 
@@ -189,6 +189,27 @@ type AuthInstance = ReturnType<typeof createAuth>
 let cached: { key: string; auth: AuthInstance } | null = null
 
 /**
+ * `getAuth()` runs on every server function — `getSession` needs it, and every
+ * read goes through `getSession`. Without this, one page that reads four
+ * resources re-reads `oauth_providers` four times. The rows only change from
+ * the admin UI in this process, and every writer calls `resetAuthCache`, so a
+ * short lease is enough; it also bounds how stale another instance's write can
+ * look here.
+ */
+const PROVIDER_TTL_MS = 15_000
+let providerCache: { providers: Providers; expiresAt: number } | null = null
+
+async function loadProviders(): Promise<Providers> {
+  if (providerCache && providerCache.expiresAt > Date.now()) {
+    return providerCache.providers
+  }
+
+  const providers = await readProviders()
+  providerCache = { providers, expiresAt: Date.now() + PROVIDER_TTL_MS }
+  return providers
+}
+
+/**
  * The OAuth client id/secret live in the database, so the auth instance is
  * rebuilt whenever that configuration changes (checked per request, cached).
  */
@@ -216,4 +237,5 @@ export async function getEnabledProviderIds(): Promise<string[]> {
 
 export function resetAuthCache() {
   cached = null
+  providerCache = null
 }

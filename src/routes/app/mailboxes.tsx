@@ -22,21 +22,36 @@ import type {
   MailboxSummary,
 } from '@/components/app/mailbox/types'
 import { countdown } from '@/lib/format'
+import {
+  REFRESH_INTERVAL,
+  domainsQuery,
+  invalidateMailData,
+  mailboxesQuery,
+  messageQuery,
+  messagesQuery,
+  queryKeys,
+} from '@/lib/queries'
+import type {
+  MessageDetail as MessageDetailData,
+  MessagePage,
+} from '@/lib/queries'
 import { headTitle } from '@/lib/site'
-import {
-  listDomainsFn,
-  listMailboxesFn,
-  deleteMailboxFn,
-  renewMailboxFn,
-} from '@/server/functions/mailboxes'
-import {
-  deleteMessageFn,
-  getMessageFn,
-  listMessagesFn,
-  markMessageFn,
-} from '@/server/functions/messages'
+import { deleteMailboxFn, renewMailboxFn } from '@/server/functions/mailboxes'
+import { deleteMessageFn, markMessageFn } from '@/server/functions/messages'
+import type { Result } from '@/server/result'
 
 const PAGE_SIZE = 20
+
+/**
+ * Rewrites the payload of a cached `Result` without touching its success or
+ * failure shape, so an optimistic edit can never turn an error into a hit.
+ */
+function patchResult<T>(
+  current: Result<T> | undefined,
+  map: (data: T) => T,
+): Result<T> | undefined {
+  return current?.ok ? { ...current, data: map(current.data) } : current
+}
 
 export const Route = createFileRoute('/app/mailboxes')({
   head: headTitle('邮箱'),
@@ -74,17 +89,15 @@ function MailboxesPage() {
     return () => clearInterval(timer)
   }, [])
 
-  const mailboxesQuery = useQuery({
-    queryKey: ['mailboxes'],
-    queryFn: () => listMailboxesFn(),
-    refetchInterval: 30_000,
+  // The rail polls; the query itself stays poll-free because the compose page
+  // shares it and must not refresh a picker while someone is writing.
+  const mailboxes = useQuery({
+    ...mailboxesQuery(),
+    refetchInterval: REFRESH_INTERVAL.mailboxes,
   })
-  const domainsQuery = useQuery({
-    queryKey: ['domains'],
-    queryFn: () => listDomainsFn(),
-  })
+  const domains = useQuery(domainsQuery())
 
-  const all = mailboxesQuery.data?.ok ? mailboxesQuery.data.data : []
+  const all = mailboxes.data?.ok ? mailboxes.data.data : []
   const now = Date.now()
   const active = all
     .filter((mailbox) => isMailboxVisible(mailbox, now))
@@ -97,32 +110,38 @@ function MailboxesPage() {
   const selectedMailbox = active.find((mailbox) => mailbox.id === mailboxParam)
   const mailboxId = selectedMailbox?.id
 
-  const list = useQuery({
-    queryKey: ['messages', mailboxId ?? 'all', page],
-    queryFn: () =>
-      listMessagesFn({
-        data: {
-          ...(mailboxId ? { mailboxId } : {}),
-          page,
-          pageSize: PAGE_SIZE,
-        },
-      }),
-    refetchInterval: 15_000,
-  })
+  const list = useQuery(messagesQuery({ mailboxId, page, pageSize: PAGE_SIZE }))
 
-  const detail = useQuery({
-    queryKey: ['message', messageId],
-    queryFn: () => getMessageFn({ data: { id: messageId! } }),
-    enabled: Boolean(messageId),
-  })
+  const detail = useQuery(messageQuery(messageId))
 
   const mark = useMutation({
     mutationFn: (input: { id: string; isRead: boolean }) =>
       markMessageFn({ data: input }),
+    // Opening a message flips one flag. Patching the two caches that show it
+    // keeps the whole list from being re-read just to repaint one row; the
+    // unread counters still come from the server, because they are sums.
+    onMutate: ({ id, isRead }) => {
+      queryClient.setQueryData<Result<MessageDetailData>>(
+        queryKeys.message(id),
+        (current) =>
+          patchResult(current, (message) => ({ ...message, isRead })),
+      )
+      queryClient.setQueriesData<Result<MessagePage>>(
+        { queryKey: queryKeys.messages },
+        (current) =>
+          patchResult(current, (payload) => ({
+            ...payload,
+            items: payload.items.map((item) =>
+              item.id === id ? { ...item, isRead } : item,
+            ),
+          })),
+      )
+    },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['messages'] })
-      await queryClient.invalidateQueries({ queryKey: ['mailboxes'] })
-      await queryClient.invalidateQueries({ queryKey: ['overview'] })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.mailboxes }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.overview }),
+      ])
     },
   })
 
@@ -139,10 +158,8 @@ function MailboxesPage() {
         search: { mailbox: mailboxId, message: undefined },
         replace: true,
       })
-      queryClient.removeQueries({ queryKey: ['message', id] })
-      await queryClient.invalidateQueries({ queryKey: ['messages'] })
-      await queryClient.invalidateQueries({ queryKey: ['mailboxes'] })
-      await queryClient.invalidateQueries({ queryKey: ['overview'] })
+      queryClient.removeQueries({ queryKey: queryKeys.message(id) })
+      await invalidateMailData(queryClient)
     },
   })
 
@@ -161,9 +178,7 @@ function MailboxesPage() {
           replace: true,
         })
       }
-      await queryClient.invalidateQueries({ queryKey: ['messages'] })
-      await queryClient.invalidateQueries({ queryKey: ['mailboxes'] })
-      await queryClient.invalidateQueries({ queryKey: ['overview'] })
+      await invalidateMailData(queryClient)
     },
   })
 
@@ -175,7 +190,7 @@ function MailboxesPage() {
         return
       }
       toast.success('已续期', { description: countdown(result.data.expiresAt) })
-      await queryClient.invalidateQueries({ queryKey: ['mailboxes'] })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.mailboxes })
     },
   })
 
@@ -190,8 +205,8 @@ function MailboxesPage() {
   // A temporary mailbox can disappear from the list while it is selected.
   // Drop the stale search param so the view falls back to every mailbox.
   useEffect(() => {
-    if (!mailboxParam || !mailboxesQuery.data?.ok) return
-    const stillListed = mailboxesQuery.data.data.some(
+    if (!mailboxParam || !mailboxes.data?.ok) return
+    const stillListed = mailboxes.data.data.some(
       (mailbox) => mailbox.id === mailboxParam,
     )
     if (stillListed) return
@@ -200,7 +215,7 @@ function MailboxesPage() {
       search: { mailbox: undefined, message: undefined },
       replace: true,
     })
-  }, [mailboxParam, mailboxesQuery.data, router])
+  }, [mailboxParam, mailboxes.data, router])
 
   useEffect(() => {
     if (message && !message.isRead) {
@@ -228,11 +243,8 @@ function MailboxesPage() {
     })
   }
 
-  const canCreate = domainsQuery.data?.ok
-    ? domainsQuery.data.data.length > 0
-    : true
-  const missingDomains =
-    domainsQuery.data?.ok && domainsQuery.data.data.length === 0
+  const canCreate = domains.data?.ok ? domains.data.data.length > 0 : true
+  const missingDomains = domains.data?.ok && domains.data.data.length === 0
 
   const header = (
     <PageHeader
@@ -333,7 +345,7 @@ function MailboxesPage() {
     </>
   )
 
-  if (mailboxesQuery.isLoading) {
+  if (mailboxes.isLoading) {
     return (
       <div className="flex flex-col gap-4">
         {header}
@@ -347,13 +359,13 @@ function MailboxesPage() {
     )
   }
 
-  if (!mailboxesQuery.data?.ok) {
+  if (!mailboxes.data?.ok) {
     return (
       <div className="flex flex-col gap-4">
         {header}
         <EmptyState
           title="无法加载邮箱"
-          description={mailboxesQuery.data?.message ?? '请刷新页面重试'}
+          description={mailboxes.data?.message ?? '请刷新页面重试'}
         />
         {modals}
       </div>

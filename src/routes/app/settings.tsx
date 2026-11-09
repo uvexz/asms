@@ -12,8 +12,9 @@ import { PageHeader } from '@/components/app/page-header'
 import { authClient } from '@/lib/auth-client'
 import { authErrorMessage } from '@/lib/auth-errors'
 import { providerLabel } from '@/lib/oauth-providers'
+import { linkedAccountsQuery, queryKeys } from '@/lib/queries'
 import { headTitle } from '@/lib/site'
-import { linkedAccountsFn } from '@/server/functions/account'
+import { useSignOut } from '@/lib/use-sign-out'
 
 export const Route = createFileRoute('/app/settings')({
   head: headTitle('个人设置'),
@@ -23,7 +24,10 @@ export const Route = createFileRoute('/app/settings')({
     linked: typeof search.linked === 'string' ? search.linked : undefined,
     error: typeof search.error === 'string' ? search.error : undefined,
   }),
-  loader: async () => linkedAccountsFn(),
+  // Warm the query cache during the render pass, so the section below paints
+  // with data and the same rows are not fetched a second time on mount.
+  loader: ({ context }) =>
+    context.queryClient.ensureQueryData(linkedAccountsQuery()),
   component: SettingsPage,
 })
 
@@ -31,6 +35,7 @@ function SettingsPage() {
   const { session } = Route.useRouteContext()
   const { linked, error: redirectError } = Route.useSearch()
   const router = useRouter()
+  const signOut = useSignOut()
   const user = session?.user
 
   const [name, setName] = useState(user?.name ?? '')
@@ -176,11 +181,7 @@ function SettingsPage() {
           <Button
             variant="danger"
             leadingIcon={RiLogoutBoxRLine}
-            onClick={async () => {
-              await authClient.signOut()
-              await router.invalidate()
-              await router.navigate({ to: '/login' })
-            }}
+            onClick={() => void signOut()}
           >
             退出登录
           </Button>
@@ -192,19 +193,15 @@ function SettingsPage() {
 
 function ThirdPartyAccounts() {
   const queryClient = useQueryClient()
-  const loaderData = Route.useLoaderData()
   const [pendingProvider, setPendingProvider] = useState<string | null>(null)
   const [unlinkTarget, setUnlinkTarget] = useState<{
     label: string
     accountId: string
   } | null>(null)
 
-  const query = useQuery({
-    queryKey: ['linked-accounts'],
-    queryFn: () => linkedAccountsFn(),
-    initialData: loaderData,
-    staleTime: 30_000,
-  })
+  // The loader already put this in the cache; the subscription only re-renders
+  // when unbinding invalidates it.
+  const query = useQuery(linkedAccountsQuery())
   const data = query.data?.ok ? query.data.data : null
 
   if (!data || data.items.length === 0) return null
@@ -238,7 +235,7 @@ function ThirdPartyAccounts() {
       throw error
     }
     toast.success('已解绑')
-    await queryClient.invalidateQueries({ queryKey: ['linked-accounts'] })
+    await queryClient.invalidateQueries({ queryKey: queryKeys.linkedAccounts })
   }
 
   return (

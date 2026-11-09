@@ -12,8 +12,9 @@ import {
 } from '@/components/base/modal/modal'
 import { Select, SelectItem } from '@/components/base/select/select'
 import { toast } from '@/components/base/toast/toast'
+import { domainsQuery, invalidateMailData } from '@/lib/queries'
 import { randomTempLocalPart } from '@/lib/temp-address'
-import { createMailboxFn, listDomainsFn } from '@/server/functions/mailboxes'
+import { createMailboxFn } from '@/server/functions/mailboxes'
 import type { MailboxKind } from './types'
 
 type DomainOption = { id: string; name: string; isDefault: boolean }
@@ -25,11 +26,9 @@ export type CreatedMailbox = {
 }
 
 function useAvailableDomains(isOpen: boolean) {
-  const query = useQuery({
-    queryKey: ['domains'],
-    queryFn: () => listDomainsFn(),
-    enabled: isOpen,
-  })
+  // Cached for five minutes across every modal and the mailboxes page; the
+  // `enabled` gate only skips the request while the dialog is closed.
+  const query = useQuery({ ...domainsQuery(), enabled: isOpen })
 
   return query.data?.ok ? query.data.data : []
 }
@@ -106,8 +105,7 @@ function useCreateMailbox() {
         toast.error('创建失败', { description: result.message })
         return
       }
-      await queryClient.invalidateQueries({ queryKey: ['mailboxes'] })
-      await queryClient.invalidateQueries({ queryKey: ['overview'] })
+      await invalidateMailData(queryClient)
     },
   })
 }

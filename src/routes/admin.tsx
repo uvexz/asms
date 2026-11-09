@@ -24,7 +24,7 @@ import type { DashboardNavItem } from '@/components/application/dashboard/dashbo
 import { SiteMark } from '@/components/app/site-mark'
 import { Drawer } from '@/components/base/drawer/drawer'
 import { IconButton } from '@/components/base/buttons/icon-button'
-import { authClient } from '@/lib/auth-client'
+import { useSignOut } from '@/lib/use-sign-out'
 
 export const Route = createFileRoute('/admin')({
   beforeLoad: ({ context }) => {
@@ -83,15 +83,10 @@ function AdminLayout() {
   const { session, site } = Route.useRouteContext()
   const router = useRouter()
   const location = useLocation()
+  const signOut = useSignOut()
   const [mobileOpen, setMobileOpen] = useState(false)
   const user = session?.user
   if (!user) return null
-
-  const signOut = async () => {
-    await authClient.signOut()
-    await router.invalidate()
-    await router.navigate({ to: '/login' })
-  }
 
   const sidebar = (
     <DashboardSidebar

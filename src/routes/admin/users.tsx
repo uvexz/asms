@@ -21,12 +21,9 @@ import { toast } from '@/components/base/toast/toast'
 import { EmptyState, PageHeader } from '@/components/app/page-header'
 import { TablePagination } from '@/components/app/table-pagination'
 import { formatFullDateTime } from '@/lib/format'
+import { adminUsersQuery, queryKeys } from '@/lib/queries'
 import { headTitle } from '@/lib/site'
-import {
-  adminBanUserFn,
-  adminSetRoleFn,
-  adminUsersFn,
-} from '@/server/functions/admin'
+import { adminBanUserFn, adminSetRoleFn } from '@/server/functions/admin'
 
 const PAGE_SIZE = 20
 
@@ -46,11 +43,7 @@ function AdminUsersPage() {
   const [roleTarget, setRoleTarget] = useState<RoleTarget | null>(null)
   const [banTarget, setBanTarget] = useState<BanTarget | null>(null)
 
-  const list = useQuery({
-    queryKey: ['admin-users', query, page],
-    queryFn: () =>
-      adminUsersFn({ data: { search: query || undefined, page } }),
-  })
+  const list = useQuery(adminUsersQuery({ search: query, page }))
 
   const setRole = useMutation({
     mutationFn: (input: { userId: string; role: 'user' | 'admin' }) =>
@@ -61,7 +54,7 @@ function AdminUsersPage() {
         return
       }
       toast.success('角色已更新')
-      await queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.adminUsers })
     },
   })
 
@@ -74,7 +67,7 @@ function AdminUsersPage() {
         return
       }
       toast.success('状态已更新')
-      await queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.adminUsers })
     },
   })
 
@@ -128,10 +121,7 @@ function AdminUsersPage() {
                       {item.email}
                     </span>
                   </div>
-                  <Chip
-                    variant="caption"
-                    color={item.banned ? 'rose' : 'lime'}
-                  >
+                  <Chip variant="caption" color={item.banned ? 'rose' : 'lime'}>
                     {item.banned ? '已封禁' : '正常'}
                   </Chip>
                 </div>
@@ -181,7 +171,9 @@ function AdminUsersPage() {
                   size="xs"
                   variant="secondary"
                   className={
-                    item.banned ? 'self-start' : 'self-start text-text-error-primary'
+                    item.banned
+                      ? 'self-start'
+                      : 'self-start text-text-error-primary'
                   }
                   onClick={() =>
                     setBanTarget({

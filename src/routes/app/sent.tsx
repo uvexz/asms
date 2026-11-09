@@ -9,8 +9,8 @@ import { Modal, ModalBody, ModalHeader } from '@/components/base/modal/modal'
 import { Skeleton } from '@/components/base/skeleton/skeleton'
 import { EmptyState, PageHeader } from '@/components/app/page-header'
 import { formatFullDateTime } from '@/lib/format'
+import { sentDetailQuery, sentQuery } from '@/lib/queries'
 import { headTitle } from '@/lib/site'
-import { getSentFn, listSentFn } from '@/server/functions/send'
 
 export const Route = createFileRoute('/app/sent')({
   head: headTitle('已发送'),
@@ -44,16 +44,9 @@ function SentPage() {
   const [page, setPage] = useState(1)
   const [openId, setOpenId] = useState<string | null>(null)
 
-  const list = useQuery({
-    queryKey: ['sent', page],
-    queryFn: () => listSentFn({ data: { page, pageSize: 20 } }),
-  })
+  const list = useQuery(sentQuery(page))
 
-  const detail = useQuery({
-    queryKey: ['sent-detail', openId],
-    queryFn: () => getSentFn({ data: { id: openId! } }),
-    enabled: Boolean(openId),
-  })
+  const detail = useQuery(sentDetailQuery(openId))
 
   const items = list.data?.ok ? list.data.data.items : []
   const total = list.data?.ok ? list.data.data.total : 0
