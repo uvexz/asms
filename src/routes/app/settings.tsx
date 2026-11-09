@@ -12,10 +12,11 @@ import { PageHeader } from '@/components/app/page-header'
 import { authClient } from '@/lib/auth-client'
 import { authErrorMessage } from '@/lib/auth-errors'
 import { providerLabel } from '@/lib/oauth-providers'
+import { headTitle } from '@/lib/site'
 import { linkedAccountsFn } from '@/server/functions/account'
 
 export const Route = createFileRoute('/app/settings')({
-  head: () => ({ meta: [{ title: '个人设置 · asms' }] }),
+  head: headTitle('个人设置'),
   validateSearch: (
     search: Record<string, unknown>,
   ): { linked?: string; error?: string } => ({

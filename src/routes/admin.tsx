@@ -21,6 +21,7 @@ import {
 
 import { DashboardSidebar } from '@/components/application/dashboard/dashboard-sidebar'
 import type { DashboardNavItem } from '@/components/application/dashboard/dashboard-sidebar'
+import { SiteMark } from '@/components/app/site-mark'
 import { Drawer } from '@/components/base/drawer/drawer'
 import { IconButton } from '@/components/base/buttons/icon-button'
 import { authClient } from '@/lib/auth-client'
@@ -79,7 +80,7 @@ function selectedKey(pathname: string) {
 }
 
 function AdminLayout() {
-  const { session } = Route.useRouteContext()
+  const { session, site } = Route.useRouteContext()
   const router = useRouter()
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -98,7 +99,8 @@ function AdminLayout() {
       selected={selectedKey(location.pathname)}
       user={{ name: user.name, email: user.email, image: user.image }}
       isAdmin
-      siteName="asms 管理"
+      siteName={`${site.siteName} 管理`}
+      siteLogoUrl={site.logoUrl}
       showSettingsRow={false}
       onSettings={() => {
         setMobileOpen(false)
@@ -125,7 +127,8 @@ function AdminLayout() {
           selected={selectedKey(location.pathname)}
           user={{ name: user.name, email: user.email, image: user.image }}
           isAdmin
-          siteName="asms 管理"
+          siteName={`${site.siteName} 管理`}
+          siteLogoUrl={site.logoUrl}
           showSettingsRow={false}
           onSettings={() => void router.navigate({ to: '/app/settings' })}
           onSignOut={() => void signOut()}
@@ -135,11 +138,9 @@ function AdminLayout() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-3 border-b border-separator-border px-4 py-3 lg:hidden">
           <Link to="/admin" className="flex items-center gap-2">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-accent-600 text-body-medium text-white">
-              A
-            </span>
+            <SiteMark logoUrl={site.logoUrl} siteName={site.siteName} />
             <span className="text-body-medium text-text-primary">
-              asms 管理
+              {site.siteName} 管理
             </span>
           </Link>
           <IconButton

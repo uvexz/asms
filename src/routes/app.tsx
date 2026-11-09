@@ -18,6 +18,7 @@ import {
 
 import { DashboardSidebar } from '@/components/application/dashboard/dashboard-sidebar'
 import type { DashboardNavItem } from '@/components/application/dashboard/dashboard-sidebar'
+import { SiteMark } from '@/components/app/site-mark'
 import { Drawer } from '@/components/base/drawer/drawer'
 import { IconButton } from '@/components/base/buttons/icon-button'
 import { authClient } from '@/lib/auth-client'
@@ -64,7 +65,7 @@ function selectedKey(pathname: string) {
 }
 
 function AppLayout() {
-  const { session } = Route.useRouteContext()
+  const { session, site } = Route.useRouteContext()
   const router = useRouter()
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -84,7 +85,8 @@ function AppLayout() {
       selected={selectedKey(location.pathname)}
       user={{ name: user.name, email: user.email, image: user.image }}
       isAdmin={user.role === 'admin'}
-      siteName="asms"
+      siteName={site.siteName}
+      siteLogoUrl={site.logoUrl}
       onSettings={() => {
         setMobileOpen(false)
         void router.navigate({ to: '/app/settings' })
@@ -118,7 +120,8 @@ function AppLayout() {
           selected={selectedKey(location.pathname)}
           user={{ name: user.name, email: user.email, image: user.image }}
           isAdmin={user.role === 'admin'}
-          siteName="asms"
+          siteName={site.siteName}
+          siteLogoUrl={site.logoUrl}
           onSettings={() => void router.navigate({ to: '/app/settings' })}
           onAdmin={
             user.role === 'admin'
@@ -132,10 +135,10 @@ function AppLayout() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-3 border-b border-separator-border px-4 py-3 lg:hidden">
           <Link to="/app" className="flex items-center gap-2">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-accent-600 text-body-medium text-white">
-              A
+            <SiteMark logoUrl={site.logoUrl} siteName={site.siteName} />
+            <span className="text-body-medium text-text-primary">
+              {site.siteName}
             </span>
-            <span className="text-body-medium text-text-primary">asms</span>
           </Link>
           <IconButton
             aria-label="打开导航"

@@ -15,10 +15,11 @@ import { StatCards } from '@/components/application/dashboard/stat-cards'
 import type { Stat } from '@/components/application/dashboard/stat-cards'
 import { EmptyState, PageHeader } from '@/components/app/page-header'
 import { formatRelative } from '@/lib/format'
+import { headTitle } from '@/lib/site'
 import { fetchOverview } from '@/server/functions/dashboard'
 
 export const Route = createFileRoute('/app/')({
-  head: () => ({ meta: [{ title: '概览 · asms' }] }),
+  head: headTitle('概览'),
   component: OverviewPage,
 })
 

@@ -22,6 +22,7 @@ import { toast } from '@/components/base/toast/toast'
 import { EmptyState, PageHeader } from '@/components/app/page-header'
 import { TablePagination } from '@/components/app/table-pagination'
 import { formatFullDateTime } from '@/lib/format'
+import { headTitle } from '@/lib/site'
 import {
   adminDeleteMailboxFn,
   adminMailboxesFn,
@@ -30,7 +31,7 @@ import {
 const PAGE_SIZE = 20
 
 export const Route = createFileRoute('/admin/mailboxes')({
-  head: () => ({ meta: [{ title: '邮箱管理 · asms' }] }),
+  head: headTitle('邮箱管理'),
   component: AdminMailboxesPage,
 })
 

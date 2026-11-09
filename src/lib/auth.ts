@@ -106,11 +106,15 @@ async function loadProviders(): Promise<Providers> {
   }
 }
 
-function createAuth(providers: Providers, emailPasswordEnabled: boolean) {
+function createAuth(
+  providers: Providers,
+  emailPasswordEnabled: boolean,
+  appName: string,
+) {
   const baseURL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3000'
 
   return betterAuth({
-    appName: 'asms',
+    appName,
     baseURL,
     secret: process.env.BETTER_AUTH_SECRET,
     database: drizzleAdapter(db, {
@@ -189,14 +193,17 @@ let cached: { key: string; auth: AuthInstance } | null = null
  * rebuilt whenever that configuration changes (checked per request, cached).
  */
 export async function getAuth(): Promise<AuthInstance> {
-  const providers = await loadProviders()
-  const enabled = await getSetting('auth.emailPasswordEnabled')
-  const key = JSON.stringify({ providers, enabled })
+  const [providers, enabled, appName] = await Promise.all([
+    loadProviders(),
+    getSetting('auth.emailPasswordEnabled'),
+    getSetting('site.name'),
+  ])
+  const key = JSON.stringify({ providers, enabled, appName })
 
   const next =
     cached && cached.key === key
       ? cached
-      : { key, auth: createAuth(providers, enabled) }
+      : { key, auth: createAuth(providers, enabled, appName) }
 
   cached = next
   return next.auth

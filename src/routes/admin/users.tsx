@@ -21,6 +21,7 @@ import { toast } from '@/components/base/toast/toast'
 import { EmptyState, PageHeader } from '@/components/app/page-header'
 import { TablePagination } from '@/components/app/table-pagination'
 import { formatFullDateTime } from '@/lib/format'
+import { headTitle } from '@/lib/site'
 import {
   adminBanUserFn,
   adminSetRoleFn,
@@ -30,7 +31,7 @@ import {
 const PAGE_SIZE = 20
 
 export const Route = createFileRoute('/admin/users')({
-  head: () => ({ meta: [{ title: '用户管理 · asms' }] }),
+  head: headTitle('用户管理'),
   component: AdminUsersPage,
 })
 

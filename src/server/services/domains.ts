@@ -9,6 +9,97 @@ import { AppError, assert } from '../result'
 const DOMAIN_RE =
   /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/
 
+/**
+ * The dashboard tells admins to set a domain up in Resend first, so a name
+ * that is already there is the normal path, not a failure — creating it again
+ * would only return "domain already exists". Look it up and adopt it instead.
+ */
+async function findResendDomain(name: string) {
+  const resend = await getResend()
+  let after: string | undefined
+
+  for (;;) {
+    const result = await enqueueResend(() =>
+      resend.domains.list(after ? { limit: 100, after } : { limit: 100 }),
+    )
+    if (result.error || !result.data) {
+      throw new AppError(
+        'RESEND_DOMAIN_FAILED',
+        result.error?.message ?? '读取 Resend 域名列表失败',
+      )
+    }
+
+    const page = result.data.data
+    const match = page.find((item) => item.name.toLowerCase() === name)
+    if (match) return match
+    if (!result.data.has_more) return null
+    after = page[page.length - 1]?.id
+    if (!after) return null
+  }
+}
+
+/** Full detail (DNS records included) for a domain Resend already knows. */
+async function describeResendDomain(id: string) {
+  const resend = await getResend()
+  const result = await enqueueResend(() => resend.domains.get(id))
+  if (result.error || !result.data) {
+    throw new AppError(
+      'RESEND_DOMAIN_FAILED',
+      result.error?.message ?? '读取 Resend 域名失败',
+    )
+  }
+
+  const data = result.data
+  // asms routes both directions through the domain; one that was added for
+  // sending only has to be widened before addresses here can receive.
+  if (
+    data.capabilities.sending !== 'enabled' ||
+    data.capabilities.receiving !== 'enabled'
+  ) {
+    const updated = await enqueueResend(() =>
+      resend.domains.update({
+        id,
+        capabilities: { sending: 'enabled', receiving: 'enabled' },
+      }),
+    )
+    if (updated.error) {
+      console.error(
+        '[asms] enable resend domain capabilities failed',
+        updated.error,
+      )
+    }
+  }
+
+  return data
+}
+
+function toRow(
+  name: string,
+  remote: {
+    id: string
+    status: string
+    region?: string | null
+    records?: unknown
+    capabilities?: unknown
+  },
+) {
+  return {
+    id: randomUUID(),
+    name,
+    resendDomainId: remote.id,
+    status: remote.status,
+    sendingEnabled: true,
+    receivingEnabled: true,
+    isDefault: false,
+    region: remote.region ?? null,
+    records: JSON.stringify(remote.records ?? []),
+    capabilities: JSON.stringify(remote.capabilities ?? {}),
+    lastCheckedAt: new Date(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }
+}
+
 export async function listDomains() {
   const rows = await db.select().from(domains).orderBy(desc(domains.createdAt))
   return rows.map((row) => ({
@@ -39,38 +130,38 @@ export async function addDomain(nameInput: string) {
   assert(!existing, 'DOMAIN_EXISTS', '该域名已添加')
 
   const resend = await getResend()
-  const result = await enqueueResend(() =>
+  const created = await enqueueResend(() =>
     resend.domains.create({
       name,
       capabilities: { sending: 'enabled', receiving: 'enabled' },
     }),
   )
-  if (result.error || !result.data) {
-    throw new AppError(
-      'RESEND_DOMAIN_FAILED',
-      result.error?.message ?? 'Resend 创建域名失败',
-    )
-  }
 
-  const created = result.data
-  const row = {
-    id: randomUUID(),
-    name,
-    resendDomainId: created.id,
-    status: created.status,
-    sendingEnabled: true,
-    receivingEnabled: true,
-    isDefault: false,
-    region: created.region ?? null,
-    records: JSON.stringify(created.records ?? []),
-    capabilities: JSON.stringify(created.capabilities ?? {}),
-    lastCheckedAt: new Date(),
-    createdAt: new Date(),
-    updatedAt: new Date(),
+  let row
+  let adopted = false
+
+  if (created.error || !created.data) {
+    // A failed lookup must not mask the original create error, so fall through
+    // to it when listing is unavailable.
+    const remote = await findResendDomain(name).catch(() => null)
+    if (!remote) {
+      const message = created.error?.message ?? 'Resend 创建域名失败'
+      throw new AppError(
+        'RESEND_DOMAIN_FAILED',
+        /already exists/i.test(message)
+          ? '该域名已存在于其他 Resend 团队，请换一个子域，或改用该团队的 API Key'
+          : message,
+      )
+    }
+    const detail = await describeResendDomain(remote.id)
+    row = toRow(name, detail)
+    adopted = true
+  } else {
+    row = toRow(name, created.data)
   }
 
   await db.insert(domains).values(row)
-  return row
+  return { ...row, adopted }
 }
 
 export async function refreshDomain(id: string) {

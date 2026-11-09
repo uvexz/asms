@@ -7,9 +7,10 @@ import { Input } from '@/components/base/input/input'
 import { toast } from '@/components/base/toast/toast'
 import { authClient } from '@/lib/auth-client'
 import { authErrorMessage } from '@/lib/auth-errors'
+import { headTitle } from '@/lib/site'
 
 export const Route = createFileRoute('/forgot-password')({
-  head: () => ({ meta: [{ title: '找回密码 · asms' }] }),
+  head: headTitle('找回密码'),
   component: ForgotPasswordPage,
 })
 

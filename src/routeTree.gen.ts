@@ -17,6 +17,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SetupRouteImport } from './routes/setup'
+import { Route as SiteDotwebmanifestRouteImport } from './routes/site[.]webmanifest'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminAuditRouteImport } from './routes/admin/audit'
 import { Route as AdminDomainsRouteImport } from './routes/admin/domains'
@@ -74,6 +75,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
 const SetupRoute = SetupRouteImport.update({
   id: '/setup',
   path: '/setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SiteDotwebmanifestRoute = SiteDotwebmanifestRouteImport.update({
+  id: '/site.webmanifest',
+  path: '/site.webmanifest',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
@@ -176,6 +182,7 @@ export interface FileRoutesByFullPath {
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
   '/setup': typeof SetupRoute
+  '/site.webmanifest': typeof SiteDotwebmanifestRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/domains': typeof AdminDomainsRoute
   '/admin/ingest': typeof AdminIngestRoute
@@ -202,6 +209,7 @@ export interface FileRoutesByTo {
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
   '/setup': typeof SetupRoute
+  '/site.webmanifest': typeof SiteDotwebmanifestRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/domains': typeof AdminDomainsRoute
   '/admin/ingest': typeof AdminIngestRoute
@@ -231,6 +239,7 @@ export interface FileRoutesById {
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
   '/setup': typeof SetupRoute
+  '/site.webmanifest': typeof SiteDotwebmanifestRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/domains': typeof AdminDomainsRoute
   '/admin/ingest': typeof AdminIngestRoute
@@ -261,6 +270,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/reset-password'
     | '/setup'
+    | '/site.webmanifest'
     | '/admin/audit'
     | '/admin/domains'
     | '/admin/ingest'
@@ -287,6 +297,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/reset-password'
     | '/setup'
+    | '/site.webmanifest'
     | '/admin/audit'
     | '/admin/domains'
     | '/admin/ingest'
@@ -315,6 +326,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/reset-password'
     | '/setup'
+    | '/site.webmanifest'
     | '/admin/audit'
     | '/admin/domains'
     | '/admin/ingest'
@@ -344,6 +356,7 @@ export interface RootRouteChildren {
   RegisterRoute: typeof RegisterRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SetupRoute: typeof SetupRoute
+  SiteDotwebmanifestRoute: typeof SiteDotwebmanifestRoute
   ApiAttachmentsIdRoute: typeof ApiAttachmentsIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiCronCleanupRoute: typeof ApiCronCleanupRoute
@@ -406,6 +419,13 @@ declare module '@tanstack/react-router' {
       path: '/setup'
       fullPath: '/setup'
       preLoaderRoute: typeof SetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/site.webmanifest': {
+      id: '/site.webmanifest'
+      path: '/site.webmanifest'
+      fullPath: '/site.webmanifest'
+      preLoaderRoute: typeof SiteDotwebmanifestRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/': {
@@ -590,6 +610,7 @@ const rootRouteChildren: RootRouteChildren = {
   RegisterRoute: RegisterRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SetupRoute: SetupRoute,
+  SiteDotwebmanifestRoute: SiteDotwebmanifestRoute,
   ApiAttachmentsIdRoute: ApiAttachmentsIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiCronCleanupRoute: ApiCronCleanupRoute,

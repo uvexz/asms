@@ -1,11 +1,13 @@
 import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 
 import { LoginPanel } from '@/components/application/auth/login-panel'
+import { SiteMark } from '@/components/app/site-mark'
 import { authErrorMessage } from '@/lib/auth-errors'
+import { headTitle } from '@/lib/site'
 import { fetchPublicConfig } from '@/server/functions/auth'
 
 export const Route = createFileRoute('/login')({
-  head: () => ({ meta: [{ title: '登录 · asms' }] }),
+  head: headTitle('登录'),
   validateSearch: (search: Record<string, unknown>): { error?: string } => ({
     error: typeof search.error === 'string' ? search.error : undefined,
   }),
@@ -27,17 +29,11 @@ function LoginPage() {
           to="/"
           className="flex w-fit items-center gap-2.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring"
         >
-          {config.logoUrl ? (
-            <img
-              src={config.logoUrl}
-              alt=""
-              className="size-7 rounded-lg object-cover"
-            />
-          ) : (
-            <span className="flex size-7 items-center justify-center rounded-lg bg-accent-600 text-caption-1-semibold text-text-white">
-              {config.siteName.slice(0, 1).toUpperCase()}
-            </span>
-          )}
+          <SiteMark
+            logoUrl={config.logoUrl}
+            siteName={config.siteName}
+            className="size-7 rounded-lg text-caption-1-semibold"
+          />
           <span className="text-body-medium text-text-secondary">
             {config.siteName}
           </span>

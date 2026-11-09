@@ -8,8 +8,10 @@ import { TanStackDevtools } from '@tanstack/react-devtools'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 import { SpaLinkHandler } from '@/components/app/spa-link-handler'
+import { ThemeColor } from '@/components/app/theme-color'
 import { Toaster } from '@/components/base/toast/toast'
-import { fetchSession } from '@/server/functions/auth'
+import { siteBranding, siteIcons, siteTitle } from '@/lib/site'
+import { fetchShell } from '@/server/functions/auth'
 
 import appCss from '../styles.css?url'
 
@@ -17,29 +19,35 @@ import type { QueryClient } from '@tanstack/react-query'
 
 export interface RouterContext {
   queryClient: QueryClient
-  session: Awaited<ReturnType<typeof fetchSession>>
+  session: Awaited<ReturnType<typeof fetchShell>>['session']
 }
 
 export const Route = createRootRouteWithContext<RouterContext>()({
-  beforeLoad: async () => ({
-    session: await fetchSession(),
-  }),
-  head: () => ({
-    meta: [
-      { charSet: 'utf-8' },
-      {
-        name: 'viewport',
-        content: 'width=device-width, initial-scale=1',
-      },
-      {
-        title: 'asms · 自托管邮箱',
-      },
-    ],
-    links: [
-      { rel: 'stylesheet', href: appCss },
-      { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
-    ],
-  }),
+  beforeLoad: async () => {
+    const shell = await fetchShell()
+    return { session: shell.session, site: shell.site }
+  },
+  head: ({ matches }) => {
+    const site = siteBranding(matches)
+    return {
+      meta: [
+        { charSet: 'utf-8' },
+        {
+          name: 'viewport',
+          content: 'width=device-width, initial-scale=1',
+        },
+        {
+          title: siteTitle(matches),
+        },
+        { name: 'theme-color', content: '#ffffff' },
+      ],
+      links: [
+        { rel: 'stylesheet', href: appCss },
+        ...siteIcons(site.logoUrl),
+        { rel: 'manifest', href: '/site.webmanifest' },
+      ],
+    }
+  },
   shellComponent: RootDocument,
 })
 
@@ -58,6 +66,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <SpaLinkHandler />
+        <ThemeColor />
         {children}
         <Toaster aria-label="通知" closeLabel="关闭通知" />
         <TanStackDevtools

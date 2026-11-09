@@ -10,17 +10,31 @@ import { getSession, requireUser } from '../session'
 import { getSiteConfig } from '../settings'
 import { audit } from '../services/audit'
 
-export const fetchSession = createServerFn({ method: 'GET' }).handler(
+/**
+ * Everything the shell needs for a render: who is signed in, and how the site
+ * names itself. One call, because the root route runs it on every navigation.
+ */
+export const fetchShell = createServerFn({ method: 'GET' }).handler(
   async () => {
-    const session = await getSession()
-    if (!session) return null
+    const [session, site] = await Promise.all([getSession(), getSiteConfig()])
+
     return {
-      user: {
-        id: session.user.id,
-        name: session.user.name,
-        email: session.user.email,
-        image: session.user.image ?? null,
-        role: (session.user as { role?: string }).role ?? 'user',
+      session: session
+        ? {
+            user: {
+              id: session.user.id,
+              name: session.user.name,
+              email: session.user.email,
+              image: session.user.image ?? null,
+              role: (session.user as { role?: string }).role ?? 'user',
+            },
+          }
+        : null,
+      site: {
+        siteName: site.siteName,
+        siteDescription: site.siteDescription,
+        logoUrl: site.logoUrl,
+        footerText: site.footerText,
       },
     }
   },

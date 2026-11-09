@@ -11,11 +11,12 @@ import { Skeleton } from '@/components/base/skeleton/skeleton'
 import { Textarea } from '@/components/base/textarea/textarea'
 import { toast } from '@/components/base/toast/toast'
 import { EmptyState, PageHeader } from '@/components/app/page-header'
+import { headTitle } from '@/lib/site'
 import { listMailboxesFn } from '@/server/functions/mailboxes'
 import { sendMailFn, sendUsageFn } from '@/server/functions/send'
 
 export const Route = createFileRoute('/app/compose')({
-  head: () => ({ meta: [{ title: '写邮件 · asms' }] }),
+  head: headTitle('写邮件'),
   component: ComposePage,
 })
 

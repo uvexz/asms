@@ -23,6 +23,7 @@ import { Switch } from '@/components/base/switch/switch'
 import { toast } from '@/components/base/toast/toast'
 import { EmptyState, PageHeader } from '@/components/app/page-header'
 import { domainStatusLabel } from '@/lib/admin-labels'
+import { headTitle } from '@/lib/site'
 import {
   adminAddDomainFn,
   adminDomainsFn,
@@ -34,7 +35,7 @@ import {
 } from '@/server/functions/admin'
 
 export const Route = createFileRoute('/admin/domains')({
-  head: () => ({ meta: [{ title: '域名 · asms' }] }),
+  head: headTitle('域名'),
   component: AdminDomainsPage,
 })
 
@@ -167,7 +168,7 @@ function AdminDomainsPage() {
         <EmptyState
           icon={RiGlobalLine}
           title="还没有域名"
-          description="先在 Resend 添加域名，再把同一域名接入这里；已有邮箱服务的域名请使用子域。"
+          description="域名需要同时承担收件与发件。已存在于 Resend 的域名会直接接入；已有邮箱服务的域名请使用子域。"
           action={
             <Button leadingIcon={RiAddLine} onClick={() => setAddOpen(true)}>
               添加域名
@@ -349,8 +350,10 @@ function AddDomainModal({
         toast.error('添加失败', { description: result.message })
         return
       }
-      toast.success('域名已添加', {
-        description: '请按 DNS 记录完成配置后点击验证。',
+      toast.success(result.data.adopted ? '已接入现有域名' : '域名已添加', {
+        description: result.data.adopted
+          ? '该域名已存在于 Resend，已直接接入；确认 DNS 记录后再验证。'
+          : '请按 DNS 记录完成配置后点击验证。',
       })
       setName('')
       onOpenChange(false)
@@ -364,7 +367,7 @@ function AddDomainModal({
         <>
           <ModalHeader
             title="添加域名"
-            description="会同时在 Resend 创建域名，并返回需要配置的 DNS 记录。"
+            description="Resend 中已有同名域名时会直接接入，否则新建并返回 DNS 记录。"
           />
           <ModalBody>
             <Input

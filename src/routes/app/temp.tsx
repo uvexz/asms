@@ -26,6 +26,7 @@ import { Skeleton } from '@/components/base/skeleton/skeleton'
 import { toast } from '@/components/base/toast/toast'
 import { EmptyState, PageHeader } from '@/components/app/page-header'
 import { countdown, formatRelative } from '@/lib/format'
+import { headTitle } from '@/lib/site'
 import {
   createMailboxFn,
   deleteMailboxFn,
@@ -35,7 +36,7 @@ import {
 } from '@/server/functions/mailboxes'
 
 export const Route = createFileRoute('/app/temp')({
-  head: () => ({ meta: [{ title: '临时邮箱 · asms' }] }),
+  head: headTitle('临时邮箱'),
   component: TempPage,
 })
 

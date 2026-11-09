@@ -8,10 +8,11 @@ import { toast } from '@/components/base/toast/toast'
 import { authClient } from '@/lib/auth-client'
 import { authErrorMessage } from '@/lib/auth-errors'
 import { isBrandProvider } from '@/lib/oauth-providers'
+import { headTitle } from '@/lib/site'
 import { fetchPublicConfig, fetchSetupStatus } from '@/server/functions/auth'
 
 export const Route = createFileRoute('/register')({
-  head: () => ({ meta: [{ title: '创建账号 · asms' }] }),
+  head: headTitle('创建账号'),
   loader: async () => fetchPublicConfig(),
   beforeLoad: ({ context }) => {
     if (context.session) throw redirect({ to: '/app' })

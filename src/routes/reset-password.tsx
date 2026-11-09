@@ -7,12 +7,13 @@ import { Input } from '@/components/base/input/input'
 import { toast } from '@/components/base/toast/toast'
 import { authClient } from '@/lib/auth-client'
 import { authErrorMessage } from '@/lib/auth-errors'
+import { headTitle } from '@/lib/site'
 
 export const Route = createFileRoute('/reset-password')({
   validateSearch: (search: Record<string, unknown>) => ({
     token: typeof search.token === 'string' ? search.token : undefined,
   }),
-  head: () => ({ meta: [{ title: '设置新密码 · asms' }] }),
+  head: headTitle('设置新密码'),
   component: ResetPasswordPage,
 })
 

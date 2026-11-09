@@ -16,12 +16,13 @@ import { EmptyState, PageHeader } from '@/components/app/page-header'
 import { TablePagination } from '@/components/app/table-pagination'
 import { auditActionLabel, auditTargetLabel } from '@/lib/admin-labels'
 import { formatFullDateTime } from '@/lib/format'
+import { headTitle } from '@/lib/site'
 import { adminAuditFn } from '@/server/functions/admin'
 
 const PAGE_SIZE = 30
 
 export const Route = createFileRoute('/admin/audit')({
-  head: () => ({ meta: [{ title: '审计日志 · asms' }] }),
+  head: headTitle('审计日志'),
   component: AdminAuditPage,
 })
 

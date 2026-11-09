@@ -9,10 +9,11 @@ import { Modal, ModalBody, ModalHeader } from '@/components/base/modal/modal'
 import { Skeleton } from '@/components/base/skeleton/skeleton'
 import { EmptyState, PageHeader } from '@/components/app/page-header'
 import { formatFullDateTime } from '@/lib/format'
+import { headTitle } from '@/lib/site'
 import { getSentFn, listSentFn } from '@/server/functions/send'
 
 export const Route = createFileRoute('/app/sent')({
-  head: () => ({ meta: [{ title: '已发送 · asms' }] }),
+  head: headTitle('已发送'),
   component: SentPage,
 })
 

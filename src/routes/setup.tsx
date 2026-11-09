@@ -5,6 +5,7 @@ import { AuthShell } from '@/components/application/auth/auth-shell'
 import { Button, ButtonLink } from '@/components/base/buttons/button'
 import { Input } from '@/components/base/input/input'
 import { toast } from '@/components/base/toast/toast'
+import { headTitle } from '@/lib/site'
 import { claimAdmin, fetchSetupStatus } from '@/server/functions/auth'
 
 export const Route = createFileRoute('/setup')({
@@ -18,13 +19,13 @@ export const Route = createFileRoute('/setup')({
     }
     return { setup: status }
   },
-  head: () => ({ meta: [{ title: '初始化 · asms' }] }),
+  head: headTitle('初始化'),
   component: SetupPage,
 })
 
 function SetupPage() {
   const { setup } = Route.useRouteContext()
-  const { session } = Route.useRouteContext()
+  const { session, site } = Route.useRouteContext()
   const router = useRouter()
   const [token, setToken] = useState('')
   const [pending, setPending] = useState(false)
@@ -51,7 +52,7 @@ function SetupPage() {
 
   return (
     <AuthShell
-      title="初始化 asms"
+      title={`初始化 ${site.siteName}`}
       description="当前实例还没有管理员。第一个账号可以在这里领取管理员权限，之后请在管理面板配置 Resend、域名与站点信息。"
     >
       {!setup.requiresToken ? (

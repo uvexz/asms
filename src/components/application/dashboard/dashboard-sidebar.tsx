@@ -214,6 +214,7 @@ export function DashboardSidebar({
   user,
   isAdmin = false,
   siteName = "asms",
+  siteLogoUrl,
   showSettingsRow = true,
   onSettings,
   onSignOut,
@@ -240,6 +241,8 @@ export function DashboardSidebar({
   user?: SidebarUser;
   isAdmin?: boolean;
   siteName?: string;
+  /** Configured site logo; the site name's initial stands in when absent. */
+  siteLogoUrl?: string;
   /** Hide the secondary "设置" row where the main nav already carries settings. */
   showSettingsRow?: boolean;
   onSettings?: () => void;
@@ -376,9 +379,17 @@ export function DashboardSidebar({
             flat && "!bg-background-secondary-default",
           )}
         >
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-100 text-caption-1-semibold text-accent-700">
-            {siteName.slice(0, 1).toUpperCase()}
-          </span>
+          {siteLogoUrl ? (
+            <img
+              src={siteLogoUrl}
+              alt=""
+              className="size-8 shrink-0 rounded-full object-cover"
+            />
+          ) : (
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-100 text-caption-1-semibold text-accent-700">
+              {siteName.slice(0, 1).toUpperCase()}
+            </span>
+          )}
           {!collapsed && (
             <span className="flex min-w-0 flex-col">
               <span className="truncate text-body-medium text-text-primary">

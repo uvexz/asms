@@ -19,6 +19,7 @@ import { Switch } from '@/components/base/switch/switch'
 import { toast } from '@/components/base/toast/toast'
 import { EmptyState } from '@/components/app/page-header'
 import { formatBytes, formatFullDateTime, formatRelative } from '@/lib/format'
+import { headTitle } from '@/lib/site'
 import {
   deleteMessageFn,
   getMessageFn,
@@ -29,7 +30,7 @@ import { listMailboxesFn } from '@/server/functions/mailboxes'
 import { cx } from '@/utils/cx'
 
 export const Route = createFileRoute('/app/inbox/$mailboxId')({
-  head: () => ({ meta: [{ title: '收件箱 · asms' }] }),
+  head: headTitle('收件箱'),
   validateSearch: (search: Record<string, unknown>) => ({
     message: typeof search.message === 'string' ? search.message : undefined,
   }),

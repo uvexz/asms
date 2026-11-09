@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { RiPlugLine, RiSaveLine } from '@remixicon/react'
@@ -16,6 +16,7 @@ import {
   providerLabel,
 } from '@/lib/oauth-providers'
 import type { ManagedProvider } from '@/lib/oauth-providers'
+import { headTitle } from '@/lib/site'
 import {
   adminOAuthFn,
   adminSaveOAuthFn,
@@ -32,12 +33,13 @@ const SECRET_KEYS = new Set([
 ])
 
 export const Route = createFileRoute('/admin/settings')({
-  head: () => ({ meta: [{ title: '站点设置 · asms' }] }),
+  head: headTitle('站点设置'),
   component: AdminSettingsPage,
 })
 
 function AdminSettingsPage() {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const [tab, setTab] = useState('site')
   const [draft, setDraft] = useState<Record<string, unknown>>({})
 
@@ -88,6 +90,9 @@ function AdminSettingsPage() {
         return next
       })
       await queryClient.invalidateQueries({ queryKey: ['admin-settings'] })
+      // The document title, sidebar and logo all read the root route's
+      // context, so the shell has to re-run before the new brand shows.
+      await router.invalidate()
     },
   })
 
@@ -175,7 +180,7 @@ function AdminSettingsPage() {
         <TabPanel id="site" className="pt-5">
           <SettingsCard
             title="站点信息"
-            description="展示在落地页、登录页与侧边栏。"
+            description="站点名称与 Logo 会出现在页面标题、登录页与面板侧边栏。"
             onSave={() =>
               save.mutate([
                 'site.name',

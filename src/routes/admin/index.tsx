@@ -14,10 +14,11 @@ import { StatCards } from '@/components/application/dashboard/stat-cards'
 import type { Stat } from '@/components/application/dashboard/stat-cards'
 import { EmptyState, PageHeader } from '@/components/app/page-header'
 import { domainStatusLabel } from '@/lib/admin-labels'
+import { headTitle } from '@/lib/site'
 import { adminOverviewFn } from '@/server/functions/admin'
 
 export const Route = createFileRoute('/admin/')({
-  head: () => ({ meta: [{ title: '管理概览 · asms' }] }),
+  head: headTitle('管理概览'),
   component: AdminOverview,
 })
 
@@ -107,7 +108,7 @@ function AdminOverview() {
           <EmptyState
             icon={RiGlobalLine}
             title="还没有配置域名"
-            description="先在 Resend 添加并验证域名，再把它接入 asms。"
+            description="添加域名后会自动创建 Resend 域名，已存在则直接接入；再按 DNS 记录完成验证。"
             action={<ButtonLink href="/admin/domains">添加域名</ButtonLink>}
           />
         ) : (

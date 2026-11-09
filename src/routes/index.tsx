@@ -3,6 +3,7 @@ import { RiArrowRightLine } from '@remixicon/react'
 import type { CSSProperties } from 'react'
 
 import { LoginPanel } from '@/components/application/auth/login-panel'
+import { SiteMark } from '@/components/app/site-mark'
 import { ButtonLink } from '@/components/base/buttons/button'
 import { useReveal } from '@/lib/use-reveal'
 import { fetchPublicConfig } from '@/server/functions/auth'
@@ -11,7 +12,9 @@ import landingCss from '@/styles/landing.css?url'
 export const Route = createFileRoute('/')({
   head: ({ loaderData }) => ({
     meta: [
-      { title: `${loaderData?.siteName ?? 'asms'} · 自托管邮箱` },
+      {
+        title: `${loaderData?.siteName ?? 'asms'} · ${loaderData?.siteDescription || '自托管邮箱'}`,
+      },
       {
         name: 'description',
         content:
@@ -55,17 +58,11 @@ function LandingPage() {
             to="/"
             className="flex items-center gap-2.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring"
           >
-            {config.logoUrl ? (
-              <img
-                src={config.logoUrl}
-                alt=""
-                className="size-8 rounded-2lg object-cover"
-              />
-            ) : (
-              <span className="flex size-8 items-center justify-center rounded-2lg bg-accent-600 text-body-medium text-text-white">
-                {config.siteName.slice(0, 1).toUpperCase()}
-              </span>
-            )}
+            <SiteMark
+              logoUrl={config.logoUrl}
+              siteName={config.siteName}
+              className="rounded-2lg"
+            />
             <span className="text-body-medium text-text-primary">
               {config.siteName}
             </span>
