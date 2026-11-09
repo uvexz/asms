@@ -1,0 +1,11 @@
+node_modules
+.output
+.git
+.env
+.env.local
+dev.db
+dev.db-*
+data
+scripts
+*.log
+.DS_Store
