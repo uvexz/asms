@@ -90,6 +90,7 @@ function toRow(
     status: remote.status,
     sendingEnabled: true,
     receivingEnabled: true,
+    temporaryEnabled: true,
     isDefault: false,
     region: remote.region ?? null,
     records: JSON.stringify(remote.records ?? []),
@@ -108,6 +109,7 @@ export async function listDomains() {
     status: row.status,
     sendingEnabled: row.sendingEnabled,
     receivingEnabled: row.receivingEnabled,
+    temporaryEnabled: row.temporaryEnabled,
     isDefault: row.isDefault,
     region: row.region,
     records: row.records,
@@ -230,7 +232,11 @@ export async function setDefaultDomain(id: string) {
 
 export async function updateDomain(
   id: string,
-  patch: { sendingEnabled?: boolean; receivingEnabled?: boolean },
+  patch: {
+    sendingEnabled?: boolean
+    receivingEnabled?: boolean
+    temporaryEnabled?: boolean
+  },
 ) {
   const row = await db.select().from(domains).where(eq(domains.id, id)).get()
   assert(row, 'DOMAIN_NOT_FOUND', '域名不存在')

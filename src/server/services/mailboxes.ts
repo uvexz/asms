@@ -120,7 +120,15 @@ function validateLocalPart(
   )
 }
 
-async function findAvailableDomain(domainId?: string) {
+async function findAvailableDomain(
+  kind: 'permanent' | 'temporary',
+  domainId?: string,
+) {
+  // A domain can be reserved for long-lived addresses; temporary mailboxes
+  // must then fall through to another one instead of landing there anyway.
+  const tempOnly =
+    kind === 'temporary' ? [eq(domains.temporaryEnabled, true)] : []
+
   if (domainId) {
     const domain = await db
       .select()
@@ -130,6 +138,11 @@ async function findAvailableDomain(domainId?: string) {
     assert(domain, 'DOMAIN_NOT_FOUND', '域名不存在')
     assert(domain.status === 'verified', 'DOMAIN_NOT_VERIFIED', '域名尚未验证')
     assert(domain.receivingEnabled, 'DOMAIN_DISABLED', '该域名未开启收件')
+    assert(
+      kind !== 'temporary' || domain.temporaryEnabled,
+      'DOMAIN_TEMP_DISABLED',
+      '该域名未开启临时邮箱',
+    )
     return domain
   }
 
@@ -141,6 +154,7 @@ async function findAvailableDomain(domainId?: string) {
         eq(domains.status, 'verified'),
         eq(domains.receivingEnabled, true),
         eq(domains.isDefault, true),
+        ...tempOnly,
       ),
     )
     .get()
@@ -151,12 +165,20 @@ async function findAvailableDomain(domainId?: string) {
     .select()
     .from(domains)
     .where(
-      and(eq(domains.status, 'verified'), eq(domains.receivingEnabled, true)),
+      and(
+        eq(domains.status, 'verified'),
+        eq(domains.receivingEnabled, true),
+        ...tempOnly,
+      ),
     )
     .orderBy(desc(domains.createdAt))
     .get()
 
-  assert(fallback, 'NO_DOMAIN', '管理员尚未配置可用域名')
+  assert(
+    fallback,
+    'NO_DOMAIN',
+    kind === 'temporary' ? '管理员未开放临时邮箱' : '管理员尚未配置可用域名',
+  )
   return fallback
 }
 
@@ -226,7 +248,7 @@ export async function createMailbox(input: {
   const localPart = input.localPart.trim().toLowerCase()
   validateLocalPart(localPart, input.kind, policy)
 
-  const domain = await findAvailableDomain(input.domainId)
+  const domain = await findAvailableDomain(input.kind, input.domainId)
   const isAdmin = input.role === 'admin'
 
   if (input.kind === 'permanent' && !isAdmin) {
@@ -473,6 +495,7 @@ export async function domainsForUser() {
       id: domains.id,
       name: domains.name,
       isDefault: domains.isDefault,
+      temporaryEnabled: domains.temporaryEnabled,
     })
     .from(domains)
     .where(

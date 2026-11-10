@@ -405,6 +405,7 @@ export const adminUpdateDomainFn = createServerFn({ method: 'POST' })
       id: z.string(),
       sendingEnabled: z.boolean().optional(),
       receivingEnabled: z.boolean().optional(),
+      temporaryEnabled: z.boolean().optional(),
     }),
   )
   .handler(async ({ data }) =>

@@ -113,6 +113,7 @@ function AdminDomainsPage() {
       id: string
       sendingEnabled?: boolean
       receivingEnabled?: boolean
+      temporaryEnabled?: boolean
     }) => adminUpdateDomainFn({ data: input }),
     onSuccess: async (result) => {
       if (!result.ok) {
@@ -265,6 +266,15 @@ function AdminDomainsPage() {
                     }
                   >
                     允许收件
+                  </Switch>
+                  <Switch
+                    size="sm"
+                    isSelected={domain.temporaryEnabled}
+                    onChange={(value) =>
+                      update.mutate({ id: domain.id, temporaryEnabled: value })
+                    }
+                  >
+                    允许临时邮箱
                   </Switch>
                 </div>
 

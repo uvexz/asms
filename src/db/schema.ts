@@ -112,6 +112,10 @@ export const domains = sqliteTable(
     receivingEnabled: integer('receiving_enabled', { mode: 'boolean' })
       .notNull()
       .default(true),
+    /** Whether users may open temporary mailboxes on this domain. */
+    temporaryEnabled: integer('temporary_enabled', { mode: 'boolean' })
+      .notNull()
+      .default(true),
     isDefault: integer('is_default', { mode: 'boolean' })
       .notNull()
       .default(false),

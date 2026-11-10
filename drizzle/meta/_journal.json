@@ -15,6 +15,13 @@
       "when": 1794230446367,
       "tag": "0001_oauth_issuer",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794309291780,
+      "tag": "0002_domain_temporary_enabled",
+      "breakpoints": true
     }
   ]
 }

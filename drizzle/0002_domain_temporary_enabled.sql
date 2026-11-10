@@ -1,0 +1,1 @@
+ALTER TABLE `domains` ADD `temporary_enabled` integer DEFAULT true NOT NULL;

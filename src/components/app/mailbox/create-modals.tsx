@@ -17,7 +17,12 @@ import { randomTempLocalPart } from '@/lib/temp-address'
 import { createMailboxFn } from '@/server/functions/mailboxes'
 import type { MailboxKind } from './types'
 
-type DomainOption = { id: string; name: string; isDefault: boolean }
+type DomainOption = {
+  id: string
+  name: string
+  isDefault: boolean
+  temporaryEnabled: boolean
+}
 
 export type CreatedMailbox = {
   id: string
@@ -50,17 +55,15 @@ function DomainField({
   domains,
   domainId,
   onDomainChange,
+  emptyHint,
 }: {
   domains: DomainOption[]
   domainId: string
   onDomainChange: (id: string) => void
+  emptyHint: string
 }) {
   if (domains.length === 0) {
-    return (
-      <p className="text-body-regular text-text-tertiary">
-        还没有可用域名，请联系管理员添加并验证域名。
-      </p>
-    )
+    return <p className="text-body-regular text-text-tertiary">{emptyHint}</p>
   }
 
   return (
@@ -173,6 +176,7 @@ export function CreateMailboxModal({
               domains={domains}
               domainId={domainId}
               onDomainChange={setDomainId}
+              emptyHint="还没有可用域名，请联系管理员添加并验证域名。"
             />
             <Input
               label="发件显示名（可选）"
@@ -211,7 +215,10 @@ export function CreateTempMailboxModal({
   onOpenChange: (open: boolean) => void
   onCreated?: (mailbox: CreatedMailbox) => void
 }) {
-  const domains = useAvailableDomains(isOpen)
+  const allDomains = useAvailableDomains(isOpen)
+  // A domain can opt out of temporary mailboxes; the picker only offers the
+  // ones that opted in.
+  const domains = allDomains.filter((domain) => domain.temporaryEnabled)
   const [domainId, setDomainId] = useDefaultDomain(domains)
   const [prefix, setPrefix] = useState(() => randomTempLocalPart())
   const create = useCreateMailbox()
@@ -268,6 +275,7 @@ export function CreateTempMailboxModal({
               domains={domains}
               domainId={domainId}
               onDomainChange={setDomainId}
+              emptyHint="当前没有开放临时邮箱的域名，请联系管理员。"
             />
           </ModalBody>
           <ModalFooter>
