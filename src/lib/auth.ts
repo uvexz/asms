@@ -11,7 +11,9 @@ import * as schema from '#/db/schema'
 import {
   BUILTIN_PROVIDERS,
   DEFAULT_OIDC_SCOPES,
+  defaultScopes,
   discoveryUrl,
+  ENV_OIDC_PROVIDER,
   OIDC_PROVIDER_IDS,
   parseScopes,
 } from '#/lib/oauth-providers'
@@ -44,6 +46,23 @@ function secretOf(row: ProviderRow | undefined): string | null {
   }
 }
 
+/**
+ * linux.do answers `/api/user` with `avatar_url`, and leaves `name` empty for
+ * members who never set a display name — `username` is then the only thing
+ * worth showing. Both are OIDC fields under different names, so the rest of
+ * the profile needs no special handling.
+ */
+function linuxDoProfile(profile: Record<string, unknown>) {
+  // Empty strings count as missing: linux.do sends `name: ""` for members
+  // who never set one, and `username` is then what should show.
+  const name = profile.name || profile.username || profile.login
+  const image = profile.avatar_url || profile.picture
+  return {
+    name: typeof name === 'string' ? name : undefined,
+    image: typeof image === 'string' ? image : undefined,
+  }
+}
+
 function fromRow(
   provider: string,
   row: ProviderRow,
@@ -55,22 +74,23 @@ function fromRow(
     clientId: row.clientId,
     clientSecret: secretOf(row) ?? undefined,
     discoveryUrl: discoveryUrl(row.issuer),
-    scopes: scopes.length > 0 ? scopes : parseScopes(DEFAULT_OIDC_SCOPES),
+    scopes: scopes.length > 0 ? scopes : defaultScopes(provider),
     pkce: true,
+    ...(provider === 'linuxdo' ? { mapProfileToUser: linuxDoProfile } : {}),
   }
 }
 
 /**
  * `OIDC_*` is the deployment-time form of the same configuration, used only
- * while no row has been saved for the provider. Saving the provider in the
+ * while no row has been saved for its provider. Saving the provider in the
  * admin UI — including switching it off — takes precedence from then on.
  */
-function fromEnv(provider: string): GenericOAuthConfig | null {
+function fromEnv(): GenericOAuthConfig | null {
   const issuer = process.env.OIDC_ISSUER?.trim()
   const clientId = process.env.OIDC_CLIENT_ID?.trim()
   if (!issuer || !clientId) return null
   return {
-    providerId: provider,
+    providerId: ENV_OIDC_PROVIDER,
     clientId,
     clientSecret: process.env.OIDC_CLIENT_SECRET?.trim() || undefined,
     discoveryUrl: discoveryUrl(issuer),
@@ -95,7 +115,13 @@ async function readProviders(): Promise<Providers> {
   const oidc: GenericOAuthConfig[] = []
   for (const provider of OIDC_PROVIDER_IDS) {
     const row = byId.get(provider)
-    const config = row ? fromRow(provider, row) : fromEnv(provider)
+    // The environment block is single-slot: it describes `sb`, never every
+    // OIDC provider the app happens to know about.
+    const config = row
+      ? fromRow(provider, row)
+      : provider === ENV_OIDC_PROVIDER
+        ? fromEnv()
+        : null
     if (config) oidc.push(config)
   }
 

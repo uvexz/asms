@@ -84,7 +84,6 @@ export function LoginPanel({
   const [formError, setFormError] = useState<string | null>(initialError ?? null)
   const [status, setStatus] = useState<Status>('idle')
 
-  const social = providers
   const busy = status !== 'idle'
   const Heading = `h${headingLevel}` as const
 
@@ -273,30 +272,21 @@ export function LoginPanel({
                 )}
               </Button>
             </>
-          ) : (
+          ) : providers.length === 0 ? (
             <p className="text-body-regular text-text-secondary">
-              {social.length > 0
-                ? '密码登录已关闭，请使用下面的第三方账号。'
-                : '站点还没有开启登录方式，请联系管理员。'}
+              站点还没有开启登录方式，请联系管理员。
             </p>
-          )}
+          ) : null}
 
-          {social.length > 0 ? (
+          {providers.length > 0 ? (
             <>
               {emailPasswordEnabled ? (
                 <div className="mt-1">
                   <Divider>或使用第三方登录</Divider>
                 </div>
               ) : null}
-              <div
-                className={cx(
-                  'grid gap-2.5',
-                  social.length === 1 && 'grid-cols-1',
-                  social.length === 2 && 'grid-cols-2',
-                  social.length > 2 && 'grid-cols-3',
-                )}
-              >
-                {social.map((provider) => {
+              <div className="flex flex-col gap-2.5">
+                {providers.map((provider) => {
                   const brand = isBrandProvider(provider)
                   const label = providerLabel(provider)
                   return (
@@ -317,9 +307,7 @@ export function LoginPanel({
                             }
                       }
                       appearance="white"
-                      iconOnly
-                      className="w-full"
-                      aria-label={`使用 ${label} 登录`}
+                      fullWidth
                       onClick={() => {
                         void authClient.signIn.social({
                           provider,
@@ -327,7 +315,9 @@ export function LoginPanel({
                           errorCallbackURL: '/login',
                         })
                       }}
-                    />
+                    >
+                      使用 {label} 登录
+                    </SocialButton>
                   )
                 })}
               </div>

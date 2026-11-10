@@ -14,7 +14,13 @@ import {
   user,
 } from '#/db/schema'
 import { getEnabledProviderIds, resetAuthCache } from '#/lib/auth'
-import { isOidcProvider, MANAGED_PROVIDERS } from '#/lib/oauth-providers'
+import {
+  ENV_OIDC_PROVIDER,
+  isOidcProvider,
+  MANAGED_PROVIDERS,
+  providerIssuer,
+  providerScopes,
+} from '#/lib/oauth-providers'
 import { encryptSecret } from '../crypto'
 import { asAdmin } from '../session'
 import { AppError, assert } from '../result'
@@ -487,8 +493,9 @@ export const adminOAuthFn = createServerFn({ method: 'GET' }).handler(
       return {
         items: MANAGED_PROVIDERS.map((provider) => {
           const row = map.get(provider)
+          const oidc = isOidcProvider(provider)
           // The `OIDC_*` environment block stands in until a row exists.
-          const fromEnv = provider === 'sb' && !row && envOidc
+          const fromEnv = provider === ENV_OIDC_PROVIDER && !row && envOidc
           return {
             provider,
             enabled: row?.enabled ?? fromEnv,
@@ -496,9 +503,19 @@ export const adminOAuthFn = createServerFn({ method: 'GET' }).handler(
               row?.clientId ??
               (fromEnv ? (process.env.OIDC_CLIENT_ID ?? '') : ''),
             issuer:
-              row?.issuer ?? (fromEnv ? (process.env.OIDC_ISSUER ?? '') : ''),
+              row?.issuer ??
+              (fromEnv
+                ? (process.env.OIDC_ISSUER ?? '')
+                : oidc
+                  ? (providerIssuer(provider) ?? '')
+                  : ''),
             scopes:
-              row?.scopes ?? (fromEnv ? (process.env.OIDC_SCOPES ?? '') : ''),
+              row?.scopes ??
+              (fromEnv
+                ? (process.env.OIDC_SCOPES ?? '')
+                : oidc
+                  ? providerScopes(provider)
+                  : ''),
             hasSecret:
               Boolean(row?.clientSecretEnc) ||
               (fromEnv && Boolean(process.env.OIDC_CLIENT_SECRET)),
@@ -657,10 +674,11 @@ function normalizeIssuer(value?: string): string | null {
 
 /**
  * A provider served from `OIDC_*` never stored a secret, so saving the rest of
- * the form without retyping it adopts the environment one.
+ * the form without retyping it adopts the environment one. Those variables
+ * describe one provider, so no other slot may inherit them.
  */
 function envSecret(provider: string): string | null {
-  if (!isOidcProvider(provider)) return null
+  if (provider !== ENV_OIDC_PROVIDER) return null
   const secret = process.env.OIDC_CLIENT_SECRET?.trim()
   return secret ? encryptSecret(secret) : null
 }

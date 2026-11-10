@@ -11,9 +11,10 @@ import { Tab, TabList, TabPanel, Tabs } from '@/components/base/tabs/tabs'
 import { toast } from '@/components/base/toast/toast'
 import { PageHeader } from '@/components/app/page-header'
 import {
-  DEFAULT_OIDC_SCOPES,
   isOidcProvider,
+  providerIssuer,
   providerLabel,
+  providerScopes,
 } from '@/lib/oauth-providers'
 import type { ManagedProvider } from '@/lib/oauth-providers'
 import {
@@ -629,7 +630,7 @@ function OAuthEditor({
       {oidc ? (
         <Input
           label="Issuer"
-          placeholder="https://sb.sb/oidc"
+          placeholder={providerIssuer(provider) ?? 'https://<issuer>'}
           value={issuer}
           onChange={setIssuer}
           hint="其余端点由 <issuer>/.well-known/openid-configuration 自动发现"
@@ -648,7 +649,7 @@ function OAuthEditor({
       {oidc ? (
         <Input
           label="Scopes"
-          placeholder={DEFAULT_OIDC_SCOPES}
+          placeholder={providerScopes(provider)}
           value={scopes}
           onChange={setScopes}
           hint="留空使用默认值；没有 email 就取不到登录邮箱"
