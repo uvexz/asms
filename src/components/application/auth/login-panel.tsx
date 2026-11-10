@@ -7,10 +7,10 @@ import {
   RiErrorWarningLine,
   RiEyeLine,
   RiEyeOffLine,
-  RiShieldKeyholeLine,
 } from '@remixicon/react'
 import { FieldError } from 'react-aria-components'
 
+import { ProviderButtons } from '@/components/application/auth/provider-buttons'
 import { Button } from '@/components/base/buttons/button'
 import { LinkButton } from '@/components/base/buttons/link-button'
 import { Checkbox } from '@/components/base/checkbox/checkbox'
@@ -18,11 +18,9 @@ import { Divider } from '@/components/base/divider/divider'
 import { hintTextClassName } from '@/components/base/input/hint-text'
 import { Input, InputBase, TextField } from '@/components/base/input/input'
 import { Label } from '@/components/base/input/label'
-import { SocialButton } from '@/components/base/social-button/social-button'
 import { Spinner } from '@/components/base/spinner/spinner'
 import { authClient } from '@/lib/auth-client'
 import { authErrorMessage } from '@/lib/auth-errors'
-import { isBrandProvider, providerLabel } from '@/lib/oauth-providers'
 import { cx } from '@/utils/cx'
 
 /**
@@ -285,58 +283,25 @@ export function LoginPanel({
                   <Divider>或使用第三方登录</Divider>
                 </div>
               ) : null}
-              <div className="flex flex-col gap-2.5">
-                {providers.map((provider) => {
-                  const brand = isBrandProvider(provider)
-                  const label = providerLabel(provider)
-                  return (
-                    <SocialButton
-                      key={provider}
-                      brand={brand ? provider : 'custom'}
-                      config={
-                        brand
-                          ? undefined
-                          : {
-                              label,
-                              icon: (
-                                <RiShieldKeyholeLine
-                                  aria-hidden
-                                  className="size-[18px]"
-                                />
-                              ),
-                            }
-                      }
-                      appearance="white"
-                      fullWidth
-                      onClick={() => {
-                        void authClient.signIn.social({
-                          provider,
-                          callbackURL: '/app',
-                          errorCallbackURL: '/login',
-                        })
-                      }}
-                    >
-                      使用 {label} 登录
-                    </SocialButton>
-                  )
-                })}
-              </div>
+              <ProviderButtons providers={providers} />
             </>
           ) : null}
         </form>
 
-        {registrationEnabled ? (
+        {/* With email + password off there is no registration form to point
+            at: the first third-party sign-in is the sign-up. */}
+        {!registrationEnabled ? (
+          <p className="mt-6 text-center text-caption-1-regular text-text-tertiary">
+            自助注册已关闭，账号由管理员开通。
+          </p>
+        ) : emailPasswordEnabled ? (
           <p className="mt-6 text-center text-body-regular text-text-secondary">
             还没有账号？{' '}
             <LinkButton href="/register" size="small" className="py-1">
               创建账号
             </LinkButton>
           </p>
-        ) : (
-          <p className="mt-6 text-center text-caption-1-regular text-text-tertiary">
-            自助注册已关闭，账号由管理员开通。
-          </p>
-        )}
+        ) : null}
       </div>
     </div>
   )

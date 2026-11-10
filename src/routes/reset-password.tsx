@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 
+import { AuthClosed } from '@/components/application/auth/auth-closed'
 import { AuthShell } from '@/components/application/auth/auth-shell'
 import { Button } from '@/components/base/buttons/button'
 import { Input } from '@/components/base/input/input'
@@ -8,16 +9,19 @@ import { toast } from '@/components/base/toast/toast'
 import { authClient } from '@/lib/auth-client'
 import { authErrorMessage } from '@/lib/auth-errors'
 import { headTitle } from '@/lib/site'
+import { fetchPublicConfig } from '@/server/functions/auth'
 
 export const Route = createFileRoute('/reset-password')({
   validateSearch: (search: Record<string, unknown>) => ({
     token: typeof search.token === 'string' ? search.token : undefined,
   }),
   head: headTitle('设置新密码'),
+  loader: async () => fetchPublicConfig(),
   component: ResetPasswordPage,
 })
 
 function ResetPasswordPage() {
+  const config = Route.useLoaderData()
   const { token } = Route.useSearch()
   const router = useRouter()
   const [password, setPassword] = useState('')
@@ -52,6 +56,17 @@ function ResetPasswordPage() {
 
     toast.success('密码已重置，请重新登录')
     await router.navigate({ to: '/login' })
+  }
+
+  // An old reset mail can still be opened after the admin turns password
+  // sign-in off. Say so instead of showing fields the server would reject.
+  if (!config.emailPasswordEnabled) {
+    return (
+      <AuthClosed
+        title="设置新密码"
+        description="站点已关闭邮箱密码登录，此重置链接不再可用，请改用第三方账号登录。"
+      />
+    )
   }
 
   return (

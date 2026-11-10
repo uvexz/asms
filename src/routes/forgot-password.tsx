@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
 
+import { AuthClosed } from '@/components/application/auth/auth-closed'
 import { AuthShell } from '@/components/application/auth/auth-shell'
 import { Button } from '@/components/base/buttons/button'
 import { Input } from '@/components/base/input/input'
@@ -8,13 +9,16 @@ import { toast } from '@/components/base/toast/toast'
 import { authClient } from '@/lib/auth-client'
 import { authErrorMessage } from '@/lib/auth-errors'
 import { headTitle } from '@/lib/site'
+import { fetchPublicConfig } from '@/server/functions/auth'
 
 export const Route = createFileRoute('/forgot-password')({
   head: headTitle('找回密码'),
+  loader: async () => fetchPublicConfig(),
   component: ForgotPasswordPage,
 })
 
 function ForgotPasswordPage() {
+  const config = Route.useLoaderData()
   const [email, setEmail] = useState('')
   const [pending, setPending] = useState(false)
   const [sent, setSent] = useState(false)
@@ -32,6 +36,17 @@ function ForgotPasswordPage() {
       return
     }
     setSent(true)
+  }
+
+  // Nothing to recover when the site signs people in through a provider:
+  // there is no password on file, and the server would refuse the request.
+  if (!config.emailPasswordEnabled) {
+    return (
+      <AuthClosed
+        title="找回密码"
+        description="站点已关闭邮箱密码登录，账号通过第三方登录进入，没有可重置的密码。"
+      />
+    )
   }
 
   return (

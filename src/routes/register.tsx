@@ -2,8 +2,10 @@ import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 
 import { AuthCard } from '@/components/application/auth/auth-card'
+import { AuthClosed } from '@/components/application/auth/auth-closed'
 import { AuthShell } from '@/components/application/auth/auth-shell'
-import { ButtonLink } from '@/components/base/buttons/button'
+import { ProviderButtons } from '@/components/application/auth/provider-buttons'
+import { LinkButton } from '@/components/base/buttons/link-button'
 import { toast } from '@/components/base/toast/toast'
 import { authClient } from '@/lib/auth-client'
 import { authErrorMessage } from '@/lib/auth-errors'
@@ -56,11 +58,42 @@ function RegisterPage() {
 
   if (!config.registrationEnabled) {
     return (
-      <AuthShell
+      <AuthClosed
         title="注册暂未开放"
         description="站点管理员已关闭自助注册。如果你已有账号，可以直接登录。"
+      />
+    )
+  }
+
+  // Email + password is a sign-in method the admin can switch off. With it off
+  // there is no credential to create here — the first third-party sign-in is
+  // the sign-up — so the page keeps the providers and drops the form rather
+  // than offering what the server would refuse.
+  if (!config.emailPasswordEnabled) {
+    return (
+      <AuthShell
+        title={`创建 ${config.siteName} 账号`}
+        description={
+          config.providers.length > 0
+            ? '用第三方账号登录，首次登录即创建账号。'
+            : undefined
+        }
+        footer={
+          <>
+            已有账号？{' '}
+            <LinkButton href="/login" size="small" className="py-1">
+              去登录
+            </LinkButton>
+          </>
+        }
       >
-        <ButtonLink href="/login">前往登录</ButtonLink>
+        {config.providers.length > 0 ? (
+          <ProviderButtons providers={config.providers} />
+        ) : (
+          <p className="text-body-regular text-text-secondary">
+            站点还没有开启登录方式，请联系管理员。
+          </p>
+        )}
       </AuthShell>
     )
   }
