@@ -275,6 +275,23 @@ export async function removeDomain(id: string) {
   await db.delete(domains).where(eq(domains.id, id))
 }
 
+/**
+ * Names only, and only the ones that can actually receive. This is what the
+ * landing page is allowed to publish about a domain — nothing else is.
+ */
+export async function publicDomainNames(limit = 4) {
+  const rows = await db
+    .select({ name: domains.name })
+    .from(domains)
+    .where(
+      and(eq(domains.status, 'verified'), eq(domains.receivingEnabled, true)),
+    )
+    .orderBy(desc(domains.isDefault), domains.name)
+    .limit(limit)
+
+  return rows.map((row) => row.name)
+}
+
 export async function countDomains() {
   const row = await db
     .select({ value: count() })

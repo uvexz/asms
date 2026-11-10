@@ -1,12 +1,13 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { RiArrowRightLine } from '@remixicon/react'
+import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 
 import { LoginPanel } from '@/components/application/auth/login-panel'
 import { SiteMark } from '@/components/app/site-mark'
 import { ButtonLink } from '@/components/base/buttons/button'
 import { useReveal } from '@/lib/use-reveal'
-import { fetchPublicConfig } from '@/server/functions/auth'
+import { fetchPublicConfig, fetchPublicDomains } from '@/server/functions/auth'
 import landingCss from '@/styles/landing.css?url'
 
 export const Route = createFileRoute('/')({
@@ -23,27 +24,36 @@ export const Route = createFileRoute('/')({
     ],
     links: [{ rel: 'stylesheet', href: landingCss }],
   }),
-  loader: async () => fetchPublicConfig(),
+  loader: async () => {
+    const [config, domains] = await Promise.all([
+      fetchPublicConfig(),
+      fetchPublicDomains(),
+    ])
+    return { ...config, domains }
+  },
   component: LandingPage,
 })
 
-const SPECS = [
+const CAPABILITIES = [
   {
     term: '长期邮箱',
-    value: '前缀 3 位起',
-    note: '默认每人 5 个，上限由管理员配置。',
+    detail: '地址长期归你，收到的邮件实时入库。',
   },
   {
     term: '临时邮箱',
-    value: '60 分钟到期',
-    note: '可续期，总寿命 24 小时，到期自动清理。',
+    detail: '开一个临时地址，到期自动清理，可以续期。',
   },
   {
     term: '发件',
-    value: '走 Resend',
-    note: '每日额度按人配置，管理员不受限。',
+    detail: '用自己的域名发信，回信进同一个收件箱。',
   },
 ] as const
+
+/** A word is typed out, held, erased, then the next one starts. */
+const HOLD_MS = 2600
+const TYPE_MS = 90
+const DELETE_MS = 45
+const SWITCH_MS = 240
 
 function LandingPage() {
   const config = Route.useLoaderData()
@@ -77,20 +87,12 @@ function LandingPage() {
               </span>
               <span className="landing-enter landing-d-2 block">
                 该有自己的
-                <span className="relative inline-block">
-                  收件箱
-                  <span
-                    aria-hidden
-                    className="landing-rule absolute inset-x-0 -bottom-1 h-0.5 rounded-full bg-accent-600"
-                  />
-                </span>
-                。
+                <Headline domains={config.domains} />
               </span>
             </h1>
 
             <p className="landing-enter landing-d-3 max-w-[33rem] text-title-3-regular leading-7 text-text-secondary">
-              长期地址和一次性地址并存。收件实时入库，发件走
-              Resend，数据只留在你自己的服务器上。
+              收件实时入库，发件走 Resend，数据只留在你自己的服务器上。
             </p>
           </div>
 
@@ -124,7 +126,7 @@ function LandingPage() {
           </div>
         </section>
 
-        <Specs />
+        <Capabilities />
       </div>
 
       <footer className="mx-auto mt-8 w-full max-w-[1120px] px-6 sm:px-8">
@@ -138,29 +140,133 @@ function LandingPage() {
 }
 
 /**
- * The spec sheet. Rows, not cards: three boxes would read as marketing, and
- * this product's honest shape is a table of what you actually get.
+ * The word after "该有自己的" is typed through what this site actually hands
+ * out: the inbox itself, then each domain it can put in front of it. Every
+ * word is kept invisibly in one grid cell, so the sentence is measured once at
+ * its widest: characters can come and go without reflowing the headline or
+ * moving anything below it. Motion lives in landing.css.
  */
-function Specs() {
+function Headline({ domains }: { domains: string[] }) {
+  const words = useMemo(
+    () => ['收件箱', ...domains.map((name) => `@${name}`)],
+    [domains],
+  )
+  // The full stop is part of the typed run, so the caret always sits at the
+  // end of the sentence instead of trailing behind a stationary "。".
+  const tokens = useMemo(() => words.map((word) => `${word}。`), [words])
+  const state = useTypewriter(tokens)
+  const visible = (tokens[state.index] ?? '').slice(0, state.length)
+
+  return (
+    <>
+      <span
+        aria-hidden
+        className="landing-rotor inline-grid max-w-full items-baseline"
+      >
+        {tokens.map((token) => (
+          <span key={token} className="invisible col-start-1 row-start-1">
+            {token}
+            {/* The caret takes space too; without it here the box would grow
+                by a few pixels as a word is typed out in full. */}
+            <span className="landing-caret" />
+          </span>
+        ))}
+        <span className="col-start-1 row-start-1">
+          {visible}
+          <span
+            className="landing-caret bg-accent-600"
+            data-phase={state.phase}
+          />
+        </span>
+      </span>
+      <span className="sr-only">{words.join('、')}</span>
+    </>
+  )
+}
+
+type TypePhase = 'holding' | 'deleting' | 'switching' | 'typing'
+type TypeState = { index: number; length: number; phase: TypePhase }
+
+const TYPE_DELAYS: Record<TypePhase, number> = {
+  holding: HOLD_MS,
+  deleting: DELETE_MS,
+  switching: SWITCH_MS,
+  typing: TYPE_MS,
+}
+
+function advanceTypewriter(state: TypeState, tokens: string[]): TypeState {
+  const token = tokens[state.index] ?? ''
+
+  switch (state.phase) {
+    case 'holding':
+      return { ...state, phase: 'deleting' }
+    case 'deleting':
+      return state.length > 1
+        ? { ...state, length: state.length - 1 }
+        : {
+            index: (state.index + 1) % tokens.length,
+            length: 0,
+            phase: 'switching',
+          }
+    case 'switching':
+      return { ...state, length: 1, phase: 'typing' }
+    case 'typing':
+      return state.length < token.length
+        ? { ...state, length: state.length + 1 }
+        : { ...state, length: token.length, phase: 'holding' }
+  }
+}
+
+function useTypewriter(tokens: string[]) {
+  // SSR and hydration both start on the complete first word: no flash of an
+  // empty headline, and no missing copy when JS never runs.
+  const [state, setState] = useState<TypeState>({
+    index: 0,
+    length: tokens[0]?.length ?? 0,
+    phase: 'holding',
+  })
+
+  useEffect(() => {
+    if (tokens.length < 2) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    const timer = window.setTimeout(
+      () => setState((current) => advanceTypewriter(current, tokens)),
+      TYPE_DELAYS[state.phase],
+    )
+    return () => window.clearTimeout(timer)
+  }, [state, tokens])
+
+  return state
+}
+
+/**
+ * Three capabilities, not three parameter sheets: each row says what the thing
+ * lets you do. Numbers (quotas, TTLs) live in the app where they can be acted
+ * on — here they would only be trivia.
+ */
+function Capabilities() {
   const ref = useReveal<HTMLElement>()
 
   return (
-    <section ref={ref} aria-label="服务规格">
-      <dl className="divide-y divide-separator-border border-t border-separator-border">
-        {SPECS.map((spec, index) => (
+    <section
+      ref={ref}
+      aria-label="邮箱能力"
+      className="border-t border-separator-border pt-8"
+    >
+      <dl className="grid gap-8 sm:grid-cols-3 sm:gap-12">
+        {CAPABILITIES.map((capability, index) => (
           <div
-            key={spec.term}
+            key={capability.term}
             data-reveal-item
             style={{ '--reveal-index': index } as CSSProperties}
-            className="grid gap-1 py-5 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-baseline sm:gap-8"
+            className="flex flex-col gap-2"
           >
-            <dt className="text-caption-1-medium text-text-tertiary">
-              {spec.term}
+            <dt className="text-title-3-medium text-text-primary">
+              {capability.term}
             </dt>
             <dd className="text-body-regular text-text-secondary">
-              <span className="text-text-primary">{spec.value}</span>
-              <span aria-hidden> · </span>
-              {spec.note}
+              {capability.detail}
             </dd>
           </div>
         ))}

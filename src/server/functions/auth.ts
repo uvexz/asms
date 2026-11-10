@@ -7,6 +7,7 @@ import { user } from '#/db/schema'
 import { getEnabledProviderIds, resetAuthCache } from '#/lib/auth'
 import { AppError, assert, run } from '../result'
 import { getSession, requireUser } from '../session'
+import { publicDomainNames } from '../services/domains'
 import { getSiteConfig } from '../settings'
 import { audit } from '../services/audit'
 
@@ -57,6 +58,15 @@ export const fetchPublicConfig = createServerFn({ method: 'GET' }).handler(
       providers,
     }
   },
+)
+
+/**
+ * The landing hero rotates over the domains this site hands out, so it needs
+ * the names. Kept out of `fetchPublicConfig` on purpose: the four auth screens
+ * read that call on every visit and never look at a domain.
+ */
+export const fetchPublicDomains = createServerFn({ method: 'GET' }).handler(
+  async () => publicDomainNames(),
 )
 
 export const fetchSetupStatus = createServerFn({ method: 'GET' }).handler(
