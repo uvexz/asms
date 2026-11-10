@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import {
   RiDeleteBin6Line,
   RiFileCopyLine,
@@ -18,7 +19,7 @@ import {
 } from '@/components/base/dropdown/dropdown'
 import { Skeleton } from '@/components/base/skeleton/skeleton'
 import { toast } from '@/components/base/toast/toast'
-import { EmptyState } from '@/components/app/page-header'
+import { EmptyState, ErrorState } from '@/components/app/page-header'
 import {
   ScrollFade,
   useScrollFade,
@@ -175,20 +176,10 @@ export function MessageList({
             </div>
           ) : error ? (
             <div className="p-4">
-              <EmptyState
+              <ErrorState
                 title="无法读取这些邮件"
                 description={error}
-                action={
-                  mailbox ? (
-                    <Button
-                      size="small"
-                      variant="secondary"
-                      onClick={() => onSelectMailbox(undefined)}
-                    >
-                      查看全部邮件
-                    </Button>
-                  ) : undefined
-                }
+                onRetry={onRefresh}
               />
             </div>
           ) : items.length === 0 ? (
@@ -282,7 +273,7 @@ export function MessageList({
             上一页
           </Button>
           <span className="text-caption-1-regular text-text-tertiary">
-            第 {page} / {Math.ceil(total / pageSize)} 页
+            共 {total} 条 · 第 {page} / {Math.ceil(total / pageSize)} 页
           </span>
           <Button
             size="xs"
@@ -311,8 +302,17 @@ function FilterPill({
   temporary?: boolean
   onClick: () => void
 }) {
+  const ref = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (active) {
+      ref.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    }
+  }, [active])
+
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onClick}
       aria-current={active ? 'true' : undefined}

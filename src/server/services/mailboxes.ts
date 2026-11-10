@@ -17,7 +17,7 @@ type MailboxRow = typeof mailboxes.$inferSelect
 
 /** Enough for one-off signups; stops an account from turning the rail into a
  * thousands-row `IN (...)` query and an unbounded storage sink. */
-const MAX_TEMP_MAILBOXES = 20
+export const MAX_TEMP_MAILBOXES = 20
 
 /** Display names go into an RFC 5322 `From` header, so control characters and
  * delimiters have to be removed before they reach Resend. */
@@ -344,7 +344,7 @@ export async function createMailbox(input: {
     if (release && release.availableAt.getTime() > Date.now()) {
       throw new AppError(
         'ADDRESS_COOLDOWN',
-        '该地址刚被释放，冷却期内不可重新创建',
+        `该地址刚被释放，${policy.permanentCooldownDays} 天内不可重新创建`,
       )
     }
   }

@@ -3,7 +3,7 @@ import { useState } from 'react'
 
 import { AuthClosed } from '@/components/application/auth/auth-closed'
 import { AuthShell } from '@/components/application/auth/auth-shell'
-import { Button } from '@/components/base/buttons/button'
+import { Button, ButtonLink } from '@/components/base/buttons/button'
 import { Input } from '@/components/base/input/input'
 import { toast } from '@/components/base/toast/toast'
 import { authClient } from '@/lib/auth-client'
@@ -66,6 +66,17 @@ function ResetPasswordPage() {
         title="设置新密码"
         description="站点已关闭邮箱密码登录，此重置链接不再可用，请改用第三方账号登录。"
       />
+    )
+  }
+
+  if (!token) {
+    return (
+      <AuthShell
+        title="重置链接无效"
+        description="这个链接不完整或已失效。请重新发起找回密码，我们会再发一封邮件。"
+      >
+        <ButtonLink href="/forgot-password">重新发起找回密码</ButtonLink>
+      </AuthShell>
     )
   }
 

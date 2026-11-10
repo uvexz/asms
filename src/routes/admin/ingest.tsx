@@ -13,7 +13,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/base/table/table'
-import { EmptyState, PageHeader } from '@/components/app/page-header'
+import {
+  EmptyState,
+  ErrorState,
+  PageHeader,
+} from '@/components/app/page-header'
 import { TablePagination } from '@/components/app/table-pagination'
 import { formatRecipients, ingestResultLabel } from '@/lib/admin-labels'
 import { formatFullDateTime } from '@/lib/format'
@@ -43,6 +47,7 @@ function AdminIngestPage() {
 
   const items = list.data?.ok ? list.data.data.items : []
   const total = list.data?.ok ? list.data.data.total : 0
+  const listError = list.data && !list.data.ok ? list.data.message : undefined
 
   return (
     <div className="flex flex-col gap-6">
@@ -53,6 +58,12 @@ function AdminIngestPage() {
 
       {list.isLoading ? (
         <Skeleton className="h-64 w-full" />
+      ) : list.isError || Boolean(listError) ? (
+        <ErrorState
+          title="无法加载收件日志"
+          description={listError}
+          onRetry={() => void list.refetch()}
+        />
       ) : items.length === 0 ? (
         <EmptyState title="还没有收件记录" />
       ) : (

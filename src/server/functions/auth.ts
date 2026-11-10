@@ -89,6 +89,7 @@ export const fetchSetupStatus = createServerFn({ method: 'GET' }).handler(
     return {
       needsSetup: admins === 0,
       requiresToken: Boolean(process.env.SETUP_TOKEN),
+      production: process.env.NODE_ENV === 'production',
     }
   },
 )

@@ -21,8 +21,12 @@ import {
 import { Skeleton } from '@/components/base/skeleton/skeleton'
 import { Switch } from '@/components/base/switch/switch'
 import { toast } from '@/components/base/toast/toast'
-import { EmptyState, PageHeader } from '@/components/app/page-header'
-import { domainStatusLabel } from '@/lib/admin-labels'
+import {
+  EmptyState,
+  ErrorState,
+  PageHeader,
+} from '@/components/app/page-header'
+import { domainStatusColor, domainStatusLabel } from '@/lib/admin-labels'
 import { adminDomainsQuery, invalidateDomains } from '@/lib/queries'
 import { headTitle } from '@/lib/site'
 import {
@@ -59,6 +63,15 @@ function parseRecords(value: string | null): DnsRecord[] {
   }
 }
 
+async function copyRecord(value: string) {
+  try {
+    await navigator.clipboard.writeText(value)
+    toast.success('已复制')
+  } catch {
+    toast.error('复制失败')
+  }
+}
+
 function AdminDomainsPage() {
   const queryClient = useQueryClient()
   const [addOpen, setAddOpen] = useState(false)
@@ -78,7 +91,7 @@ function AdminDomainsPage() {
         return
       }
       toast.success('已触发验证', {
-        description: `当前状态：${result.data.status}`,
+        description: `当前状态：${domainStatusLabel(result.data.status)}`,
       })
       await refreshAll()
     },
@@ -91,7 +104,9 @@ function AdminDomainsPage() {
         toast.error(result.message)
         return
       }
-      toast.success('状态已刷新', { description: result.data.status })
+      toast.success('状态已刷新', {
+        description: domainStatusLabel(result.data.status),
+      })
       await refreshAll()
     },
   })
@@ -137,12 +152,13 @@ function AdminDomainsPage() {
   })
 
   const items = list.data?.ok ? list.data.data.items : []
+  const listError = list.data && !list.data.ok ? list.data.message : undefined
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="域名"
-        description="域名同时承担收件（MX）与发件（SPF/DKIM）。"
+        description="域名用于收件（MX）与发件（SPF/DKIM），可分别启停。"
         actions={
           <Button
             leadingIcon={RiAddLine}
@@ -160,11 +176,17 @@ function AdminDomainsPage() {
             <Skeleton key={key} className="h-48 w-full" />
           ))}
         </div>
+      ) : list.isError || Boolean(listError) ? (
+        <ErrorState
+          title="无法加载域名"
+          description={listError}
+          onRetry={() => void list.refetch()}
+        />
       ) : items.length === 0 ? (
         <EmptyState
           icon={RiGlobalLine}
           title="还没有域名"
-          description="域名需要同时承担收件与发件。已存在于 Resend 的域名会直接接入；已有邮箱服务的域名请使用子域。"
+          description="域名用于收件与发件，可分别启停。已存在于 Resend 的域名会直接接入；已有邮箱服务的域名请使用子域。"
           action={
             <Button leadingIcon={RiAddLine} onClick={() => setAddOpen(true)}>
               添加域名
@@ -188,7 +210,7 @@ function AdminDomainsPage() {
                       </h2>
                       <Chip
                         variant="caption"
-                        color={domain.status === 'verified' ? 'lime' : 'yellow'}
+                        color={domainStatusColor(domain.status)}
                       >
                         {domainStatusLabel(domain.status)}
                       </Chip>
@@ -287,17 +309,40 @@ function AdminDomainsPage() {
                       {records.map((record, index) => (
                         <div
                           key={`${record.type}-${record.name}-${index}`}
-                          className="grid gap-1 rounded-xl bg-background-primary-default p-3 text-caption-1-regular sm:grid-cols-[80px_1fr]"
+                          className="grid gap-2 rounded-xl bg-background-primary-default p-3 text-caption-1-regular sm:grid-cols-[80px_1fr_auto]"
                         >
                           <span className="text-text-tertiary">
-                            {record.type}
+                            {record.type ?? '—'}
                           </span>
                           <span className="break-all text-text-primary">
                             {record.name} → {record.value}
                             {record.priority !== undefined
                               ? ` · 优先级 ${record.priority}`
                               : ''}
-                            {record.status ? ` · ${record.status}` : ''}
+                            {record.ttl ? ` · TTL ${record.ttl}` : ''}
+                            {record.status
+                              ? ` · ${domainStatusLabel(record.status)}`
+                              : ''}
+                          </span>
+                          <span className="flex flex-wrap items-center gap-1">
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              onClick={() => void copyRecord(record.name ?? '')}
+                              disabled={!record.name}
+                            >
+                              复制名称
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              onClick={() =>
+                                void copyRecord(record.value ?? '')
+                              }
+                              disabled={!record.value}
+                            >
+                              复制值
+                            </Button>
                           </span>
                         </div>
                       ))}

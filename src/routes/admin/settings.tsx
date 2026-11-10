@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/base/skeleton/skeleton'
 import { Switch } from '@/components/base/switch/switch'
 import { Tab, TabList, TabPanel, Tabs } from '@/components/base/tabs/tabs'
 import { toast } from '@/components/base/toast/toast'
-import { PageHeader } from '@/components/app/page-header'
+import { ErrorState, PageHeader } from '@/components/app/page-header'
 import {
   isOidcProvider,
   providerIssuer,
@@ -37,6 +37,35 @@ const SECRET_KEYS = new Set([
   'storage.s3.secretAccessKey',
 ])
 
+const SITE_KEYS = [
+  'site.name',
+  'site.description',
+  'site.logoUrl',
+  'site.footerText',
+  'site.timezone',
+  'site.registrationEnabled',
+]
+const MAIL_KEYS = [
+  'mail.maxPermanentMailboxes',
+  'mail.dailySendLimit',
+  'mail.tempTtlMinutes',
+  'mail.tempMaxLifetimeMinutes',
+  'mail.permanentCooldownDays',
+  'mail.retentionDays',
+  'mail.minPrefixPermanent',
+  'mail.minPrefixTemp',
+  'mail.maxPrefixLength',
+  'mail.allowTempSending',
+]
+const RESEND_KEYS = ['resend.fromName', 'resend.systemFromAddress']
+const STORAGE_KEYS = [
+  'storage.s3.endpoint',
+  'storage.s3.region',
+  'storage.s3.bucket',
+  'storage.s3.forcePathStyle',
+]
+const AUTH_KEYS = ['auth.emailPasswordEnabled']
+
 export const Route = createFileRoute('/admin/settings')({
   head: headTitle('站点设置'),
   component: AdminSettingsPage,
@@ -54,6 +83,10 @@ function AdminSettingsPage() {
   const rows = settings.data?.ok ? settings.data.data.rows : []
   const oauthItems = oauth.data?.ok ? oauth.data.data.items : []
   const callbackBase = oauth.data?.ok ? oauth.data.data.callbackBase : ''
+  const settingsError =
+    settings.data && !settings.data.ok ? settings.data.message : undefined
+  const oauthError =
+    oauth.data && !oauth.data.ok ? oauth.data.message : undefined
 
   useEffect(() => {
     if (!rows.length) return
@@ -76,9 +109,12 @@ function AdminSettingsPage() {
         toast.error('保存失败', { description: result.message })
         return
       }
-      toast.success('设置已保存', {
-        description: `更新 ${result.data.changed.length} 项`,
-      })
+      toast.success(
+        '设置已保存',
+        result.data.changed.length > 0
+          ? { description: `更新 ${result.data.changed.length} 项` }
+          : undefined,
+      )
       setDraft((current) => {
         const next = { ...current }
         // Only clear the secrets that were actually submitted; a key typed
@@ -135,6 +171,21 @@ function AdminSettingsPage() {
     return [...changed, ...secrets]
   }, [draft, originals, rows])
 
+  const resendKeys = [
+    ...RESEND_KEYS,
+    ...(text('resend.apiKey') ? ['resend.apiKey'] : []),
+    ...(text('resend.webhookSecret') ? ['resend.webhookSecret'] : []),
+  ]
+  const storageKeys = [
+    ...STORAGE_KEYS,
+    ...(text('storage.s3.accessKeyId') ? ['storage.s3.accessKeyId'] : []),
+    ...(text('storage.s3.secretAccessKey')
+      ? ['storage.s3.secretAccessKey']
+      : []),
+  ]
+  const isDirty = (keys: string[]) =>
+    keys.some((key) => dirtyKeys.includes(key))
+
   const discard = () => {
     const next: Record<string, unknown> = {}
     for (const key of Object.keys(originals)) next[key] = originals[key]
@@ -150,22 +201,29 @@ function AdminSettingsPage() {
   if (settings.isLoading) {
     return (
       <div className="flex flex-col gap-6">
-        <PageHeader
-          title="站点设置"
-          description="站点信息、邮件策略、Resend 与登录方式。"
-        />
+        <PageHeader title="站点设置" />
         <Skeleton className="h-10 w-full max-w-md" />
         <Skeleton className="h-96 w-full" />
       </div>
     )
   }
 
+  if (settings.isError || Boolean(settingsError)) {
+    return (
+      <div className="flex flex-col gap-6">
+        <PageHeader title="站点设置" />
+        <ErrorState
+          title="无法加载站点设置"
+          description={settingsError}
+          onRetry={() => void settings.refetch()}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        title="站点设置"
-        description="站点信息、邮件策略、Resend 与登录方式。"
-      />
+      <PageHeader title="站点设置" />
 
       <Tabs selectedKey={tab} onSelectionChange={(key) => setTab(String(key))}>
         <TabList aria-label="设置分组">
@@ -180,17 +238,9 @@ function AdminSettingsPage() {
           <SettingsCard
             title="站点信息"
             description="站点名称与 Logo 会出现在页面标题、登录页与面板侧边栏。"
-            onSave={() =>
-              save.mutate([
-                'site.name',
-                'site.description',
-                'site.logoUrl',
-                'site.footerText',
-                'site.timezone',
-                'site.registrationEnabled',
-              ])
-            }
+            onSave={() => save.mutate(SITE_KEYS)}
             pending={save.isPending}
+            dirty={isDirty(SITE_KEYS)}
           >
             <div className="grid gap-4 sm:grid-cols-2">
               <Input
@@ -206,9 +256,10 @@ function AdminSettingsPage() {
               />
             </div>
             <Input
-              label="副标题"
+              label="站点描述"
               value={text('site.description')}
               onChange={(v) => set('site.description', v)}
+              hint="用于浏览器标题和安装名称"
             />
             <div className="grid gap-4 sm:grid-cols-2">
               <Input
@@ -236,50 +287,38 @@ function AdminSettingsPage() {
           <SettingsCard
             title="邮件策略"
             description="配额、临时邮箱有效期与地址规则。管理员不受配额限制。"
-            onSave={() =>
-              save.mutate([
-                'mail.maxPermanentMailboxes',
-                'mail.dailySendLimit',
-                'mail.tempTtlMinutes',
-                'mail.tempMaxLifetimeMinutes',
-                'mail.permanentCooldownDays',
-                'mail.retentionDays',
-                'mail.minPrefixPermanent',
-                'mail.minPrefixTemp',
-                'mail.maxPrefixLength',
-                'mail.allowTempSending',
-              ])
-            }
+            onSave={() => save.mutate(MAIL_KEYS)}
             pending={save.isPending}
+            dirty={isDirty(MAIL_KEYS)}
           >
             <div className="grid gap-4 sm:grid-cols-3">
               <NumberField
-                label="长期邮箱上限"
+                label="每用户长期邮箱上限"
                 value={num('mail.maxPermanentMailboxes')}
                 onChange={(v) => set('mail.maxPermanentMailboxes', Number(v))}
               />
               <NumberField
-                label="每日发件额度"
+                label="每用户每日发件额度"
                 value={num('mail.dailySendLimit')}
                 onChange={(v) => set('mail.dailySendLimit', Number(v))}
               />
               <NumberField
-                label="邮件保留天数"
+                label="邮件保留天数（收件与已发送）"
                 value={num('mail.retentionDays')}
                 onChange={(v) => set('mail.retentionDays', Number(v))}
               />
               <NumberField
-                label="临时邮箱时长（分钟）"
+                label="临时邮箱每次创建 / 续期时长（分钟）"
                 value={num('mail.tempTtlMinutes')}
                 onChange={(v) => set('mail.tempTtlMinutes', Number(v))}
               />
               <NumberField
-                label="临时邮箱最长寿命（分钟）"
+                label="临时邮箱总有效期上限（分钟）"
                 value={num('mail.tempMaxLifetimeMinutes')}
                 onChange={(v) => set('mail.tempMaxLifetimeMinutes', Number(v))}
               />
               <NumberField
-                label="地址冷却天数"
+                label="长期地址冷却天数"
                 value={num('mail.permanentCooldownDays')}
                 onChange={(v) => set('mail.permanentCooldownDays', Number(v))}
               />
@@ -313,17 +352,9 @@ function AdminSettingsPage() {
           <SettingsCard
             title="Resend"
             description="密钥加密保存，仅服务端读取。留空的密钥字段表示保持不变。"
-            onSave={() =>
-              save.mutate([
-                ...(text('resend.apiKey') ? ['resend.apiKey'] : []),
-                ...(text('resend.webhookSecret')
-                  ? ['resend.webhookSecret']
-                  : []),
-                'resend.fromName',
-                'resend.systemFromAddress',
-              ])
-            }
+            onSave={() => save.mutate(resendKeys)}
             pending={save.isPending}
+            dirty={isDirty(resendKeys)}
             extra={
               <Button
                 variant="secondary"
@@ -377,21 +408,9 @@ function AdminSettingsPage() {
           <SettingsCard
             title="对象存储"
             description="仅用于收件附件。未配置时只保留附件元数据，下载时按需向 Resend 获取。"
-            onSave={() =>
-              save.mutate([
-                'storage.s3.endpoint',
-                'storage.s3.region',
-                'storage.s3.bucket',
-                ...(text('storage.s3.accessKeyId')
-                  ? ['storage.s3.accessKeyId']
-                  : []),
-                ...(text('storage.s3.secretAccessKey')
-                  ? ['storage.s3.secretAccessKey']
-                  : []),
-                'storage.s3.forcePathStyle',
-              ])
-            }
+            onSave={() => save.mutate(storageKeys)}
             pending={save.isPending}
+            dirty={isDirty(storageKeys)}
           >
             <div className="grid gap-4 sm:grid-cols-2">
               <Input
@@ -431,7 +450,7 @@ function AdminSettingsPage() {
               isSelected={bool('storage.s3.forcePathStyle')}
               onChange={(v) => set('storage.s3.forcePathStyle', v)}
             >
-              Force path style（MinIO / R2 建议开启）
+              路径风格访问（MinIO 必开，R2 建议开）
             </Switch>
           </SettingsCard>
         </TabPanel>
@@ -440,8 +459,9 @@ function AdminSettingsPage() {
           <SettingsCard
             title="登录方式"
             description="邮箱密码与第三方 OAuth。回调地址需在对应平台登记。"
-            onSave={() => save.mutate(['auth.emailPasswordEnabled'])}
+            onSave={() => save.mutate(AUTH_KEYS)}
             pending={save.isPending}
+            dirty={isDirty(AUTH_KEYS)}
           >
             <Switch
               size="sm"
@@ -450,7 +470,20 @@ function AdminSettingsPage() {
             >
               启用邮箱密码登录
             </Switch>
+            <p className="text-caption-1-regular text-text-tertiary">
+              关闭前请至少启用一种第三方登录方式，否则保存会被拒绝。
+            </p>
           </SettingsCard>
+
+          {oauth.isError || Boolean(oauthError) ? (
+            <div className="mt-4">
+              <ErrorState
+                title="无法加载登录方式"
+                description={oauthError}
+                onRetry={() => void oauth.refetch()}
+              />
+            </div>
+          ) : null}
 
           <div className="mt-4 flex flex-col gap-4">
             {oauthItems.map((item) => (
@@ -501,6 +534,7 @@ function SettingsCard({
   children,
   onSave,
   pending,
+  dirty,
   extra,
 }: {
   title: string
@@ -508,6 +542,7 @@ function SettingsCard({
   children: React.ReactNode
   onSave: () => void
   pending: boolean
+  dirty: boolean
   extra?: React.ReactNode
 }) {
   return (
@@ -521,7 +556,11 @@ function SettingsCard({
       </div>
       {children}
       <div className="flex justify-end">
-        <Button leadingIcon={RiSaveLine} onClick={onSave} disabled={pending}>
+        <Button
+          leadingIcon={RiSaveLine}
+          onClick={onSave}
+          disabled={pending || !dirty}
+        >
           {pending ? '保存中…' : '保存'}
         </Button>
       </div>

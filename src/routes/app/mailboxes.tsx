@@ -7,7 +7,11 @@ import { Button } from '@/components/base/buttons/button'
 import { AlertDialog } from '@/components/base/modal/modal'
 import { Skeleton } from '@/components/base/skeleton/skeleton'
 import { toast } from '@/components/base/toast/toast'
-import { EmptyState, PageHeader } from '@/components/app/page-header'
+import {
+  EmptyState,
+  ErrorState,
+  PageHeader,
+} from '@/components/app/page-header'
 import {
   CreateMailboxModal,
   CreateTempMailboxModal,
@@ -21,7 +25,8 @@ import type {
   MailboxKind,
   MailboxSummary,
 } from '@/components/app/mailbox/types'
-import { countdown } from '@/lib/format'
+import { countdown, formatDuration } from '@/lib/format'
+import { useMailPolicy } from '@/lib/use-mail-policy'
 import {
   REFRESH_INTERVAL,
   domainsQuery,
@@ -97,8 +102,11 @@ function MailboxesPage() {
     refetchInterval: REFRESH_INTERVAL.mailboxes,
   })
   const domains = useQuery(domainsQuery())
+  const { policy } = useMailPolicy()
 
   const all = mailboxes.data?.ok ? mailboxes.data.data : []
+  const mailboxesError =
+    mailboxes.data && !mailboxes.data.ok ? mailboxes.data.message : undefined
   const now = Date.now()
   const active = all
     .filter((mailbox) => isMailboxVisible(mailbox, now))
@@ -218,6 +226,11 @@ function MailboxesPage() {
   const items = list.data?.ok ? list.data.data.items : []
   const total = list.data?.ok ? list.data.data.total : 0
   const listError = list.data && !list.data.ok ? list.data.message : undefined
+  const detailError = detail.isError
+    ? '请检查网络后重试。'
+    : detail.data && !detail.data.ok
+      ? detail.data.message
+      : undefined
   useEffect(() => {
     setPage(1)
   }, [mailboxId])
@@ -273,7 +286,7 @@ function MailboxesPage() {
   const header = (
     <PageHeader
       title="邮箱"
-      description="长期与临时邮箱统一收件；临时邮箱到期后自动隐藏并清理。"
+      description="长期与临时邮箱统一收件；到期的临时邮箱会从列表隐藏，并由定时任务清理。"
       actions={
         <>
           <Button
@@ -339,7 +352,11 @@ function MailboxesPage() {
         description={
           deletingMailbox
             ? `${deletingMailbox.address} 及其全部邮件会被删除。${
-                deletingMailbox.kind === 'permanent' ? '地址将进入冷却期。' : ''
+                deletingMailbox.kind === 'permanent'
+                  ? policy?.permanentCooldownDays
+                    ? `地址将进入 ${policy.permanentCooldownDays} 天冷却期。`
+                    : '地址将进入冷却期。'
+                  : ''
               }`
             : ''
         }
@@ -383,13 +400,14 @@ function MailboxesPage() {
     )
   }
 
-  if (!mailboxes.data?.ok) {
+  if (mailboxes.isError || Boolean(mailboxesError)) {
     return (
       <div className="flex flex-col gap-4">
         {header}
-        <EmptyState
+        <ErrorState
           title="无法加载邮箱"
-          description={mailboxes.data?.message ?? '请刷新页面重试'}
+          description={mailboxesError}
+          onRetry={() => void mailboxes.refetch()}
         />
         {modals}
       </div>
@@ -441,6 +459,9 @@ function MailboxesPage() {
         <MailboxRail
           mailboxes={active}
           selectedId={mailboxId}
+          renewLabel={
+            policy ? `续期 ${formatDuration(policy.tempTtlMinutes)}` : '续期'
+          }
           onSelect={selectMailbox}
           onRenew={(id) => renew.mutate(id)}
           onDelete={setDeletingMailbox}
@@ -468,8 +489,10 @@ function MailboxesPage() {
         <MessageDetail
           message={message}
           isLoading={detail.isLoading}
+          error={detailError}
           selected={Boolean(messageId)}
           mailboxAddress={mailboxId ? undefined : message?.mailboxAddress}
+          onRetry={() => void detail.refetch()}
           onBack={() => selectMessage(undefined)}
           onToggleRead={() => {
             if (message) {

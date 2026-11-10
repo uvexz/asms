@@ -1,9 +1,11 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import {
+  RiCheckLine,
   RiGlobalLine,
   RiInboxLine,
   RiMailLine,
+  RiSubtractLine,
   RiUserLine,
 } from '@remixicon/react'
 
@@ -12,8 +14,12 @@ import { ButtonLink } from '@/components/base/buttons/button'
 import { Skeleton } from '@/components/base/skeleton/skeleton'
 import { StatCards } from '@/components/application/dashboard/stat-cards'
 import type { Stat } from '@/components/application/dashboard/stat-cards'
-import { EmptyState, PageHeader } from '@/components/app/page-header'
-import { domainStatusLabel } from '@/lib/admin-labels'
+import {
+  EmptyState,
+  ErrorState,
+  PageHeader,
+} from '@/components/app/page-header'
+import { domainStatusColor, domainStatusLabel } from '@/lib/admin-labels'
 import { adminOverviewQuery } from '@/lib/queries'
 import { headTitle } from '@/lib/site'
 
@@ -23,7 +29,7 @@ export const Route = createFileRoute('/admin/')({
 })
 
 function AdminOverview() {
-  const { data, isLoading } = useQuery(adminOverviewQuery())
+  const { data, isLoading, isError, refetch } = useQuery(adminOverviewQuery())
 
   if (isLoading) {
     return (
@@ -38,8 +44,14 @@ function AdminOverview() {
     )
   }
 
-  if (!data?.ok) {
-    return <EmptyState title="无法加载概览" description={data?.message} />
+  if (isError || !data?.ok) {
+    return (
+      <ErrorState
+        title="无法加载概览"
+        description={data && !data.ok ? data.message : undefined}
+        onRetry={() => void refetch()}
+      />
+    )
   }
 
   const overview = data.data
@@ -78,17 +90,107 @@ function AdminOverview() {
     },
   ]
 
+  const checklist = [
+    {
+      label: '配置 Resend API Key',
+      hint: '站点设置 → Resend；发件与读取收件内容都依赖它',
+      done: overview.health.resend,
+      href: '/admin/settings',
+    },
+    {
+      label: '配置 Webhook Secret',
+      hint: '用于接收邮件与投递状态事件',
+      done: overview.health.webhook,
+      href: '/admin/settings',
+    },
+    {
+      label: '配置系统发件地址',
+      hint: '找回密码等系统邮件会从这个地址发出',
+      done: overview.health.systemFrom,
+      href: '/admin/settings',
+    },
+    {
+      label: '添加并验证域名',
+      hint: '收件与发件都依赖已验证的域名',
+      done: overview.health.domain,
+      href: '/admin/domains',
+    },
+    {
+      label: '配置清理定时任务',
+      hint: '设置 CRON_SECRET，并定时请求 /api/cron/cleanup',
+      done: overview.health.cron,
+      href: null,
+    },
+  ] as const
+  const pending = checklist.filter((item) => !item.done)
+
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
         title="管理概览"
-        description="站点运行状态与配置入口。"
         actions={
           <ButtonLink href="/admin/settings" size="small">
             站点设置
           </ButtonLink>
         }
       />
+
+      {pending.length > 0 ? (
+        <section className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-title-3-semibold text-text-primary">
+              开始使用
+            </h2>
+            <span className="text-caption-1-regular text-text-tertiary">
+              还差 {pending.length} 项
+            </span>
+          </div>
+          <div className="divide-y divide-separator-border overflow-hidden rounded-3xl border border-border-button-default bg-background-primary-default">
+            {checklist.map((item) => (
+              <div
+                key={item.label}
+                className="flex items-center gap-3 px-4 py-3"
+              >
+                <span
+                  className={
+                    item.done
+                      ? 'flex size-6 shrink-0 items-center justify-center rounded-full bg-status-lime-background text-status-lime-text'
+                      : 'flex size-6 shrink-0 items-center justify-center rounded-full bg-background-secondary-default text-foreground-icon-tertiary'
+                  }
+                >
+                  {item.done ? (
+                    <RiCheckLine className="size-4" aria-hidden />
+                  ) : (
+                    <RiSubtractLine className="size-4" aria-hidden />
+                  )}
+                </span>
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span
+                    className={
+                      item.done
+                        ? 'text-body-regular text-text-tertiary line-through'
+                        : 'text-body-medium text-text-primary'
+                    }
+                  >
+                    {item.label}
+                  </span>
+                  <span className="text-caption-1-regular text-text-tertiary">
+                    {item.hint}
+                  </span>
+                </div>
+                {!item.done && item.href ? (
+                  <Link
+                    to={item.href as never}
+                    className="shrink-0 text-caption-1-medium text-accent-600 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-border-focus-ring"
+                  >
+                    去配置
+                  </Link>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <StatCards variant="footer" stats={stats} columns={4} />
 
@@ -104,7 +206,7 @@ function AdminOverview() {
           <EmptyState
             icon={RiGlobalLine}
             title="还没有配置域名"
-            description="添加域名后会自动创建 Resend 域名，已存在则直接接入；再按 DNS 记录完成验证。"
+            description="域名用于收件与发件。已存在于 Resend 的域名会直接接入；已有邮箱服务的域名请使用子域。"
             action={<ButtonLink href="/admin/domains">添加域名</ButtonLink>}
           />
         ) : (
@@ -126,7 +228,7 @@ function AdminOverview() {
                 </div>
                 <Chip
                   variant="caption"
-                  color={domain.status === 'verified' ? 'lime' : 'yellow'}
+                  color={domainStatusColor(domain.status)}
                 >
                   {domainStatusLabel(domain.status)}
                 </Chip>

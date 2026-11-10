@@ -18,10 +18,12 @@ export const Route = createFileRoute('/api/attachments/$id')({
         // session, and an expired temporary mailbox must not expose files.
         const session = await getSession({ fresh: true })
         if (!session) {
-          return new Response('Unauthorized', { status: 401 })
+          return new Response('登录状态已过期，请重新登录后再下载附件。', {
+            status: 401,
+          })
         }
         if ((session.user as { banned?: boolean }).banned) {
-          return new Response('Forbidden', { status: 403 })
+          return new Response('账号已被封禁，无法下载附件。', { status: 403 })
         }
 
         try {

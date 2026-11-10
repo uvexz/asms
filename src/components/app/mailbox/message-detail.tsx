@@ -11,7 +11,7 @@ import { Chip } from '@/components/base/badges/chip'
 import { Button } from '@/components/base/buttons/button'
 import { IconButton } from '@/components/base/buttons/icon-button'
 import { Skeleton } from '@/components/base/skeleton/skeleton'
-import { EmptyState } from '@/components/app/page-header'
+import { EmptyState, ErrorState } from '@/components/app/page-header'
 import {
   ScrollFade,
   useScrollFade,
@@ -24,17 +24,21 @@ import type { MessageDetailData } from './types'
 export function MessageDetail({
   message,
   isLoading,
+  error,
   selected,
   mailboxAddress,
+  onRetry,
   onBack,
   onToggleRead,
   onDelete,
 }: {
   message: MessageDetailData | null
   isLoading: boolean
+  error?: string
   selected: boolean
   /** Set when no single mailbox is filtered, so the detail names its inbox. */
   mailboxAddress?: string
+  onRetry: () => void
   onBack: () => void
   onToggleRead: () => void
   onDelete: () => void
@@ -107,6 +111,14 @@ export function MessageDetail({
               <Skeleton className="h-8 w-2/3" />
               <Skeleton className="h-4 w-1/3" />
               <Skeleton className="h-64 w-full" />
+            </div>
+          ) : error ? (
+            <div className="p-4">
+              <ErrorState
+                title="无法加载邮件"
+                description={error}
+                onRetry={onRetry}
+              />
             </div>
           ) : !message ? (
             <div className="p-4">

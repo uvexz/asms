@@ -18,7 +18,11 @@ import {
   TableRow,
 } from '@/components/base/table/table'
 import { toast } from '@/components/base/toast/toast'
-import { EmptyState, PageHeader } from '@/components/app/page-header'
+import {
+  EmptyState,
+  ErrorState,
+  PageHeader,
+} from '@/components/app/page-header'
 import { TablePagination } from '@/components/app/table-pagination'
 import { formatFullDateTime } from '@/lib/format'
 import { adminUsersQuery, queryKeys } from '@/lib/queries'
@@ -73,10 +77,11 @@ function AdminUsersPage() {
 
   const items = list.data?.ok ? list.data.data.items : []
   const total = list.data?.ok ? list.data.data.total : 0
+  const listError = list.data && !list.data.ok ? list.data.message : undefined
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="用户管理" description="角色、封禁与邮箱数量。" />
+      <PageHeader title="用户管理" />
 
       <form
         className="flex items-end gap-2"
@@ -101,8 +106,33 @@ function AdminUsersPage() {
 
       {list.isLoading ? (
         <Skeleton className="h-64 w-full" />
+      ) : list.isError || Boolean(listError) ? (
+        <ErrorState
+          title="无法加载用户"
+          description={listError}
+          onRetry={() => void list.refetch()}
+        />
       ) : items.length === 0 ? (
-        <EmptyState title="没有匹配的用户" />
+        <EmptyState
+          title="没有匹配的用户"
+          description={
+            query ? `没有找到与「${query}」匹配的昵称或邮箱。` : undefined
+          }
+          action={
+            query ? (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setSearch('')
+                  setQuery('')
+                  setPage(1)
+                }}
+              >
+                清除搜索
+              </Button>
+            ) : undefined
+          }
+        />
       ) : (
         <div className="flex flex-col gap-3">
           {/* Phones: one card per user, every value and action visible. */}
@@ -325,7 +355,9 @@ function AdminUsersPage() {
               : `${roleTarget.email} 将失去管理后台的访问权限。`
             : ''
         }
-        confirmLabel="确认修改"
+        confirmLabel={
+          roleTarget?.role === 'admin' ? '设为管理员' : '取消管理员'
+        }
         onConfirm={async () => {
           if (!roleTarget) return
           await setRole.mutateAsync({

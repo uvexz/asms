@@ -51,6 +51,12 @@ export function domainStatusLabel(status: string) {
   return DOMAIN_STATUS[status] ?? status
 }
 
+export function domainStatusColor(status: string): 'lime' | 'yellow' | 'rose' {
+  if (status === 'verified') return 'lime'
+  if (status === 'failed' || status === 'temporary_failure') return 'rose'
+  return 'yellow'
+}
+
 const TARGET_TYPES: Record<string, string> = {
   user: '用户',
   domain: '域名',

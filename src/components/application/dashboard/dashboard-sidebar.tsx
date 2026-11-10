@@ -4,19 +4,7 @@ import { useRouter } from "@tanstack/react-router";
 import { useTemplateCopy } from "@/components/foundations/template-copy/template-copy";
 
 import { useState, type ComponentType, type ReactNode } from "react";
-import {
-  RiAsterisk,
-  RiBankLine,
-  RiCalendarLine,
-  RiChatAiLine,
-  RiCloseLine,
-  RiHomeLine,
-  RiImageAiLine,
-  RiKanbanView2,
-  RiMegaphoneLine,
-  RiSideBarFill,
-  RiUserSmileLine,
-} from "@remixicon/react";
+import { RiCloseLine, RiSideBarFill } from "@remixicon/react";
 import { ThemeToggle } from "@/components/application/theme/theme-toggle";
 import { Badge } from "@/components/base/badges/badge";
 import { cx } from "@/utils/cx";
@@ -153,19 +141,6 @@ export interface DashboardNavItem {
 /** Kept as a name for callers that typed their `selected` prop; any key works. */
 export type DashboardNavKey = string;
 
-/** The Pro dashboard's navigation, the default set. */
-export const DASHBOARD_NAV: DashboardNavItem[] = [
-  { key: "home", label: "Home", icon: RiHomeLine, href: "/templates/dashboard", badge: 152 },
-  { key: "project-board", label: "Project board", icon: RiKanbanView2, href: "/templates/project-board" },
-  { key: "marketing", label: "Marketing", icon: RiMegaphoneLine, href: "/templates/marketing" },
-  { key: "calendar", label: "Calendar", icon: RiCalendarLine, href: "/templates/calendar" },
-  { key: "finance", label: "Finance", icon: RiBankLine, href: "/templates/finance" },
-  { key: "medical", label: "Medical Report", icon: RiAsterisk, href: "/templates/medical-profile" },
-  { key: "ai-chat", label: "AI Chat", icon: RiChatAiLine, href: "/templates/ai-chat" },
-  { key: "ai-image", label: "AI Image Generation", icon: RiImageAiLine, href: "/templates/ai-image-generation" },
-  { key: "profile", label: "Profile", icon: RiUserSmileLine, href: "/templates/ai-profile" },
-];
-
 /**
  * The primary rows. A component of its own so the closures over `collapsed`
  * and the search query live here: built inline in the sidebar, the compiler
@@ -207,7 +182,7 @@ export function DashboardSidebar({
   fluid = false,
   showThemeToggle = true,
   selected = "home",
-  items = DASHBOARD_NAV,
+  items,
   flat = false,
   className,
   user,
@@ -229,18 +204,18 @@ export function DashboardSidebar({
   showThemeToggle?: boolean;
   /** Which nav item shows the selected (filled blue) state. */
   selected?: DashboardNavKey;
-  /** Primary navigation rows. The Pro dashboard's set unless a screen brings its own. */
-  items?: DashboardNavItem[];
+  /** Primary navigation rows. */
+  items: DashboardNavItem[];
   /** Removes the floating panel treatment for a sidebar revealed beneath mobile content. */
   flat?: boolean;
   className?: string;
-  user?: SidebarUser;
+  user: SidebarUser;
   isAdmin?: boolean;
   /** Account settings action, surfaced by the user menu. */
   onSettings?: () => void;
   onSignOut?: () => void;
   onAdmin?: () => void;
-} = {}) {
+}) {
   const localize = useTemplateCopy();
   const [collapsedState, setCollapsed] = useState(false);
   const [suppressUserHover, setSuppressUserHover] = useState(false);
@@ -294,7 +269,7 @@ export function DashboardSidebar({
                   ? "bg-background-tertiary-default dark:bg-background-secondary-default"
                   : undefined
               }
-              user={user ?? { name: "访客", email: "guest@asms.local" }}
+              user={user}
               isAdmin={isAdmin}
               onSettings={onSettings}
               onSignOut={onSignOut}

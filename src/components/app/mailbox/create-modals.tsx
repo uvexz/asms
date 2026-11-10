@@ -12,8 +12,10 @@ import {
 } from '@/components/base/modal/modal'
 import { Select, SelectItem } from '@/components/base/select/select'
 import { toast } from '@/components/base/toast/toast'
+import { formatDuration } from '@/lib/format'
 import { domainsQuery, invalidateMailData } from '@/lib/queries'
 import { randomTempLocalPart } from '@/lib/temp-address'
+import { useMailPolicy } from '@/lib/use-mail-policy'
 import { createMailboxFn } from '@/server/functions/mailboxes'
 import type { MailboxKind } from './types'
 
@@ -35,7 +37,12 @@ function useAvailableDomains(isOpen: boolean) {
   // `enabled` gate only skips the request while the dialog is closed.
   const query = useQuery({ ...domainsQuery(), enabled: isOpen })
 
-  return query.data?.ok ? query.data.data : []
+  return {
+    domains: query.data?.ok ? query.data.data : [],
+    isLoading: query.isLoading,
+    isError: query.isError || Boolean(query.data && !query.data.ok),
+    refetch: query.refetch,
+  }
 }
 
 function useDefaultDomain(domains: DomainOption[]) {
@@ -55,13 +62,42 @@ function DomainField({
   domains,
   domainId,
   onDomainChange,
+  isLoading,
+  isError,
+  onRetry,
   emptyHint,
 }: {
   domains: DomainOption[]
   domainId: string
   onDomainChange: (id: string) => void
+  isLoading: boolean
+  isError: boolean
+  onRetry: () => void
   emptyHint: string
 }) {
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <span className="text-body-medium text-text-secondary">域名</span>
+        <p className="text-body-regular text-text-tertiary">正在加载域名…</p>
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-start gap-2">
+        <span className="text-body-medium text-text-secondary">域名</span>
+        <p className="text-body-regular text-text-error-primary">
+          无法加载域名，请稍后重试。
+        </p>
+        <Button size="xs" variant="secondary" onClick={onRetry}>
+          重试
+        </Button>
+      </div>
+    )
+  }
+
   if (domains.length === 0) {
     return <p className="text-body-regular text-text-tertiary">{emptyHint}</p>
   }
@@ -122,14 +158,29 @@ export function CreateMailboxModal({
   onOpenChange: (open: boolean) => void
   onCreated?: (mailbox: CreatedMailbox) => void
 }) {
-  const domains = useAvailableDomains(isOpen)
+  const domainsState = useAvailableDomains(isOpen)
+  const { domains, isLoading, isError, refetch } = domainsState
   const [domainId, setDomainId] = useDefaultDomain(domains)
   const [prefix, setPrefix] = useState('')
   const [displayName, setDisplayName] = useState('')
+  const { policy } = useMailPolicy({ enabled: isOpen })
   const create = useCreateMailbox()
 
+  const minPrefix = policy?.minPrefixPermanent
+  const prefixTooShort =
+    prefix.trim().length > 0 &&
+    minPrefix !== undefined &&
+    prefix.trim().length < minPrefix
+  const canSubmit =
+    !create.isPending &&
+    prefix.trim().length > 0 &&
+    !prefixTooShort &&
+    domains.length > 0 &&
+    !isLoading &&
+    !isError
+
   const submit = () => {
-    if (!domainId) return
+    if (!domainId || !canSubmit) return
     create.mutate(
       { localPart: prefix, domainId, kind: 'permanent', displayName },
       {
@@ -155,7 +206,11 @@ export function CreateMailboxModal({
         <>
           <ModalHeader
             title="创建邮箱"
-            description="前缀最短 3 位，创建后不可修改。"
+            description={
+              minPrefix
+                ? `前缀最短 ${minPrefix} 位，创建后不可修改。`
+                : '创建后不可修改。'
+            }
           />
           <ModalBody className="flex flex-col gap-4">
             <Input
@@ -163,21 +218,31 @@ export function CreateMailboxModal({
               placeholder="hello"
               value={prefix}
               onChange={(value) => setPrefix(value.toLowerCase())}
+              isInvalid={prefixTooShort}
+              errorMessage={prefixTooShort ? `至少 ${minPrefix} 位` : undefined}
               hint={
                 prefix
                   ? `${prefix}@${
                       domains.find((domain) => domain.id === domainId)?.name ??
                       '…'
                     }`
-                  : '小写字母、数字、点、下划线、连字符'
+                  : '小写字母、数字、点、下划线、连字符；以字母或数字开头结尾'
               }
             />
             <DomainField
               domains={domains}
               domainId={domainId}
               onDomainChange={setDomainId}
+              isLoading={isLoading}
+              isError={isError}
+              onRetry={() => void refetch()}
               emptyHint="还没有可用域名，请联系管理员添加并验证域名。"
             />
+            {policy && !policy.isAdmin ? (
+              <p className="text-caption-1-regular text-text-tertiary">
+                最多创建 {policy.maxPermanentMailboxes} 个长期邮箱。
+              </p>
+            ) : null}
             <Input
               label="发件显示名（可选）"
               placeholder="例如：产品团队"
@@ -189,14 +254,7 @@ export function CreateMailboxModal({
             <Button variant="secondary" onClick={close}>
               取消
             </Button>
-            <Button
-              onClick={submit}
-              disabled={
-                create.isPending ||
-                prefix.trim().length === 0 ||
-                domains.length === 0
-              }
-            >
+            <Button onClick={submit} disabled={!canSubmit}>
               {create.isPending ? '创建中…' : '创建'}
             </Button>
           </ModalFooter>
@@ -218,13 +276,29 @@ export function CreateTempMailboxModal({
   const allDomains = useAvailableDomains(isOpen)
   // A domain can opt out of temporary mailboxes; the picker only offers the
   // ones that opted in.
-  const domains = allDomains.filter((domain) => domain.temporaryEnabled)
+  const domains = allDomains.domains.filter(
+    (domain) => domain.temporaryEnabled,
+  )
   const [domainId, setDomainId] = useDefaultDomain(domains)
   const [prefix, setPrefix] = useState(() => randomTempLocalPart())
+  const { policy } = useMailPolicy({ enabled: isOpen })
   const create = useCreateMailbox()
 
+  const minPrefix = policy?.minPrefixTemp
+  const prefixTooShort =
+    prefix.trim().length > 0 &&
+    minPrefix !== undefined &&
+    prefix.trim().length < minPrefix
+  const canSubmit =
+    !create.isPending &&
+    prefix.trim().length > 0 &&
+    !prefixTooShort &&
+    domains.length > 0 &&
+    !allDomains.isLoading &&
+    !allDomains.isError
+
   const submit = () => {
-    if (!domainId) return
+    if (!domainId || !canSubmit) return
     create.mutate(
       { localPart: prefix, domainId, kind: 'temporary' },
       {
@@ -233,7 +307,7 @@ export function CreateTempMailboxModal({
           toast.success('临时邮箱已创建', {
             description: result.data.address,
           })
-          setPrefix(randomTempLocalPart())
+          setPrefix(randomTempLocalPart(minPrefix))
           onOpenChange(false)
           onCreated?.({
             id: result.data.id,
@@ -251,7 +325,11 @@ export function CreateTempMailboxModal({
         <>
           <ModalHeader
             title="创建临时邮箱"
-            description="默认 1 小时后过期，到期自动清理。"
+            description={
+              policy
+                ? `默认 ${formatDuration(policy.tempTtlMinutes)}后过期；到期后从列表隐藏，由定时任务清理。`
+                : '到期后从列表隐藏，由定时任务清理。'
+            }
           />
           <ModalBody className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
@@ -259,13 +337,21 @@ export function CreateTempMailboxModal({
                 label="前缀"
                 value={prefix}
                 onChange={(value) => setPrefix(value.toLowerCase())}
-                hint="至少 8 位"
+                isInvalid={prefixTooShort}
+                errorMessage={
+                  prefixTooShort ? `至少 ${minPrefix} 位` : undefined
+                }
+                hint={
+                  minPrefix
+                    ? `至少 ${minPrefix} 位`
+                    : '前缀最短长度由管理员配置'
+                }
               />
               <Button
                 size="xs"
                 variant="ghost"
                 leadingIcon={RiShuffleLine}
-                onClick={() => setPrefix(randomTempLocalPart())}
+                onClick={() => setPrefix(randomTempLocalPart(minPrefix))}
                 className="self-start"
               >
                 换一个随机地址
@@ -275,21 +361,22 @@ export function CreateTempMailboxModal({
               domains={domains}
               domainId={domainId}
               onDomainChange={setDomainId}
+              isLoading={allDomains.isLoading}
+              isError={allDomains.isError}
+              onRetry={() => void allDomains.refetch()}
               emptyHint="当前没有开放临时邮箱的域名，请联系管理员。"
             />
+            {policy && !policy.isAdmin ? (
+              <p className="text-caption-1-regular text-text-tertiary">
+                同时最多保留 {policy.maxTempMailboxes} 个临时邮箱。
+              </p>
+            ) : null}
           </ModalBody>
           <ModalFooter>
             <Button variant="secondary" onClick={close}>
               取消
             </Button>
-            <Button
-              onClick={submit}
-              disabled={
-                create.isPending ||
-                prefix.trim().length < 8 ||
-                domains.length === 0
-              }
-            >
+            <Button onClick={submit} disabled={!canSubmit}>
               {create.isPending ? '创建中…' : '创建'}
             </Button>
           </ModalFooter>

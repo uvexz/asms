@@ -29,6 +29,7 @@ function SetupPage() {
   const router = useRouter()
   const [token, setToken] = useState('')
   const [pending, setPending] = useState(false)
+  const blocked = setup.production && !setup.requiresToken
 
   const submit = async () => {
     if (pending) return
@@ -53,11 +54,16 @@ function SetupPage() {
   return (
     <AuthShell
       title={`初始化 ${site.siteName}`}
-      description="当前实例还没有管理员。第一个账号可以在这里领取管理员权限，之后请在管理面板配置 Resend、域名与站点信息。"
+      description="当前实例还没有管理员。第一个账号可以在这里领取管理员权限，之后请在管理后台配置 Resend、域名与站点信息。"
     >
-      {!setup.requiresToken ? (
+      {blocked ? (
+        <p className="text-caption-1-regular text-text-error-primary">
+          生产环境必须设置 SETUP_TOKEN，否则无法完成初始化。
+        </p>
+      ) : !setup.requiresToken ? (
         <p className="text-caption-1-regular text-text-warning">
-          提示：公网部署建议设置 SETUP_TOKEN，避免初始化窗口被他人抢占。
+          开发环境可以直接领取；公网部署请设置
+          SETUP_TOKEN，避免初始化窗口被他人抢占。
         </p>
       ) : null}
 
@@ -92,7 +98,7 @@ function SetupPage() {
             />
           ) : null}
 
-          <Button onClick={submit} disabled={pending}>
+          <Button onClick={submit} disabled={pending || blocked}>
             {pending ? '处理中…' : '领取管理员权限'}
           </Button>
         </>

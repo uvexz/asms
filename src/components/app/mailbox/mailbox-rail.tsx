@@ -27,12 +27,14 @@ import type { MailboxSummary } from './types'
 export function MailboxRail({
   mailboxes,
   selectedId,
+  renewLabel,
   onSelect,
   onRenew,
   onDelete,
 }: {
   mailboxes: MailboxSummary[]
   selectedId?: string
+  renewLabel: string
   onSelect: (id: string | undefined) => void
   onRenew: (id: string) => void
   onDelete: (mailbox: MailboxSummary) => void
@@ -98,6 +100,7 @@ export function MailboxRail({
               key={mailbox.id}
               mailbox={mailbox}
               active={mailbox.id === selectedId}
+              renewLabel={renewLabel}
               onSelect={() => onSelect(mailbox.id)}
               onRenew={() => onRenew(mailbox.id)}
               onDelete={() => onDelete(mailbox)}
@@ -112,6 +115,7 @@ export function MailboxRail({
               key={mailbox.id}
               mailbox={mailbox}
               active={mailbox.id === selectedId}
+              renewLabel={renewLabel}
               onSelect={() => onSelect(mailbox.id)}
               onRenew={() => onRenew(mailbox.id)}
               onDelete={() => onDelete(mailbox)}
@@ -135,12 +139,14 @@ function SectionLabel({ children }: { children: ReactNode }) {
 function MailboxRow({
   mailbox,
   active,
+  renewLabel,
   onSelect,
   onRenew,
   onDelete,
 }: {
   mailbox: MailboxSummary
   active: boolean
+  renewLabel: string
   onSelect: () => void
   onRenew: () => void
   onDelete: () => void
@@ -149,8 +155,8 @@ function MailboxRow({
   const meta = temporary
     ? countdown(mailbox.expiresAt)
     : mailbox.lastReceivedAt
-      ? `最近 ${formatRelative(mailbox.lastReceivedAt)}`
-      : '长期邮箱'
+      ? `最后收件：${formatRelative(mailbox.lastReceivedAt)}`
+      : '还没有收件'
 
   return (
     <div
@@ -216,7 +222,7 @@ function MailboxRow({
           {temporary ? (
             <DropdownItem onSelect={onRenew}>
               <RiRefreshLine className="size-4 text-foreground-icon-secondary" />
-              <span>续期 1 小时</span>
+              <span>{renewLabel}</span>
             </DropdownItem>
           ) : null}
           <DropdownItem onSelect={onDelete}>

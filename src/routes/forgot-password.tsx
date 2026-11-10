@@ -52,11 +52,22 @@ function ForgotPasswordPage() {
   return (
     <AuthShell
       title="找回密码"
-      description="输入账号邮箱，我们会发送一封重置邮件。若未收到，请确认管理员已配置 Resend 与系统发件地址。"
+      description="输入账号邮箱，我们会发送一封重置邮件。没收到请检查垃圾邮件，或联系管理员。"
     >
       {sent ? (
-        <div className="rounded-2xl bg-background-secondary-default p-4 text-body-regular text-text-secondary">
-          如果该邮箱已注册，重置邮件会在几分钟内送达。
+        <div className="flex flex-col gap-3">
+          <div className="rounded-2xl bg-background-secondary-default p-4 text-body-regular text-text-secondary">
+            如果 {email.trim()}{' '}
+            已注册，重置邮件会在几分钟内送达。没收到请检查垃圾邮件。
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => setSent(false)}>
+              换个邮箱
+            </Button>
+            <Button variant="secondary" onClick={submit} disabled={pending}>
+              {pending ? '发送中…' : '重新发送'}
+            </Button>
+          </div>
         </div>
       ) : (
         <>

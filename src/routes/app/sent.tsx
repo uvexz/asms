@@ -4,10 +4,15 @@ import { useState } from 'react'
 import { RiSendPlaneLine } from '@remixicon/react'
 
 import { Chip } from '@/components/base/badges/chip'
-import { Button, ButtonLink } from '@/components/base/buttons/button'
+import { ButtonLink } from '@/components/base/buttons/button'
 import { Modal, ModalBody, ModalHeader } from '@/components/base/modal/modal'
 import { Skeleton } from '@/components/base/skeleton/skeleton'
-import { EmptyState, PageHeader } from '@/components/app/page-header'
+import {
+  EmptyState,
+  ErrorState,
+  PageHeader,
+} from '@/components/app/page-header'
+import { TablePagination } from '@/components/app/table-pagination'
 import { formatFullDateTime } from '@/lib/format'
 import { sentDetailQuery, sentQuery } from '@/lib/queries'
 import { headTitle } from '@/lib/site'
@@ -50,11 +55,12 @@ function SentPage() {
 
   const items = list.data?.ok ? list.data.data.items : []
   const total = list.data?.ok ? list.data.data.total : 0
+  const listError = list.data && !list.data.ok ? list.data.message : undefined
   const email = detail.data?.ok ? detail.data.data : null
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="已发送" description="发件记录与 Resend 投递状态。" />
+      <PageHeader title="已发送" />
 
       {list.isLoading ? (
         <div className="flex flex-col gap-3">
@@ -62,6 +68,12 @@ function SentPage() {
             <Skeleton key={key} className="h-16 w-full" />
           ))}
         </div>
+      ) : list.isError || Boolean(listError) ? (
+        <ErrorState
+          title="无法加载发件记录"
+          description={listError}
+          onRetry={() => void list.refetch()}
+        />
       ) : items.length === 0 ? (
         <EmptyState
           icon={RiSendPlaneLine}
@@ -107,29 +119,12 @@ function SentPage() {
         </div>
       )}
 
-      {total > 20 ? (
-        <div className="flex items-center justify-between">
-          <Button
-            size="xs"
-            variant="secondary"
-            disabled={page <= 1}
-            onClick={() => setPage((value) => Math.max(1, value - 1))}
-          >
-            上一页
-          </Button>
-          <span className="text-caption-1-regular text-text-tertiary">
-            第 {page} 页 / 共 {Math.ceil(total / 20)} 页
-          </span>
-          <Button
-            size="xs"
-            variant="secondary"
-            disabled={page * 20 >= total}
-            onClick={() => setPage((value) => value + 1)}
-          >
-            下一页
-          </Button>
-        </div>
-      ) : null}
+      <TablePagination
+        page={page}
+        pageSize={20}
+        total={total}
+        onPage={setPage}
+      />
 
       <Modal
         isOpen={Boolean(openId)}

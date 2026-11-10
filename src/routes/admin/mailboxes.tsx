@@ -19,7 +19,11 @@ import {
   TableRow,
 } from '@/components/base/table/table'
 import { toast } from '@/components/base/toast/toast'
-import { EmptyState, PageHeader } from '@/components/app/page-header'
+import {
+  EmptyState,
+  ErrorState,
+  PageHeader,
+} from '@/components/app/page-header'
 import { TablePagination } from '@/components/app/table-pagination'
 import { formatFullDateTime } from '@/lib/format'
 import { adminMailboxesQuery, queryKeys } from '@/lib/queries'
@@ -40,6 +44,7 @@ function AdminMailboxesPage() {
   const [deleting, setDeleting] = useState<{
     id: string
     address: string
+    kind: string
   } | null>(null)
 
   const list = useQuery(
@@ -63,12 +68,12 @@ function AdminMailboxesPage() {
 
   const items = list.data?.ok ? list.data.data.items : []
   const total = list.data?.ok ? list.data.data.total : 0
+  const listError = list.data && !list.data.ok ? list.data.message : undefined
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="邮箱管理"
-        description="全部用户的长期与临时邮箱。"
         actions={
           <SegmentedControl
             aria-label="邮箱类型"
@@ -90,6 +95,12 @@ function AdminMailboxesPage() {
 
       {list.isLoading ? (
         <Skeleton className="h-64 w-full" />
+      ) : list.isError || Boolean(listError) ? (
+        <ErrorState
+          title="无法加载邮箱"
+          description={listError}
+          onRetry={() => void list.refetch()}
+        />
       ) : items.length === 0 ? (
         <EmptyState title="没有邮箱" />
       ) : (
@@ -144,7 +155,11 @@ function AdminMailboxesPage() {
                   variant="secondary"
                   className="self-start text-text-error-primary"
                   onClick={() =>
-                    setDeleting({ id: item.id, address: item.address })
+                    setDeleting({
+                      id: item.id,
+                      address: item.address,
+                      kind: item.kind,
+                    })
                   }
                 >
                   删除邮箱
@@ -199,7 +214,11 @@ function AdminMailboxesPage() {
                         size="xs"
                         variant="danger"
                         onClick={() =>
-                          setDeleting({ id: item.id, address: item.address })
+                          setDeleting({
+                            id: item.id,
+                            address: item.address,
+                            kind: item.kind,
+                          })
                         }
                       >
                         删除
@@ -228,7 +247,9 @@ function AdminMailboxesPage() {
         title="删除邮箱？"
         description={
           deleting
-            ? `${deleting.address} 及其全部邮件会被删除，长期地址将进入冷却期。`
+            ? `${deleting.address} 及其全部邮件会被删除。${
+                deleting.kind === 'permanent' ? '长期地址将进入冷却期。' : ''
+              }`
             : ''
         }
         confirmLabel="删除"

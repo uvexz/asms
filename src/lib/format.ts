@@ -39,13 +39,21 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
+export function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${minutes} 分钟`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return rest === 0 ? `${hours} 小时` : `${hours} 小时 ${rest} 分钟`
+}
+
 export function countdown(expiresAt: string | null): string {
   if (!expiresAt) return ''
   const diff = new Date(expiresAt).getTime() - Date.now()
   if (diff <= 0) return '已过期'
   const minutes = Math.floor(diff / 60_000)
+  if (minutes < 1) return '即将过期'
   if (minutes < 60) return `${minutes} 分钟后过期`
   const hours = Math.floor(minutes / 60)
   const rest = minutes % 60
-  return `${hours} 小时 ${rest} 分钟后过期`
+  return rest === 0 ? `${hours} 小时后过期` : `${hours} 小时 ${rest} 分钟后过期`
 }

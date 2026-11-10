@@ -12,7 +12,11 @@ import { PageHeader } from '@/components/app/page-header'
 import { authClient } from '@/lib/auth-client'
 import { authErrorMessage } from '@/lib/auth-errors'
 import { providerLabel } from '@/lib/oauth-providers'
-import { linkedAccountsQuery, queryKeys } from '@/lib/queries'
+import {
+  linkedAccountsQuery,
+  publicConfigQuery,
+  queryKeys,
+} from '@/lib/queries'
 import { headTitle } from '@/lib/site'
 import { useSignOut } from '@/lib/use-sign-out'
 
@@ -37,6 +41,8 @@ function SettingsPage() {
   const router = useRouter()
   const signOut = useSignOut()
   const user = session?.user
+  const config = useQuery(publicConfigQuery())
+  const emailPasswordEnabled = config.data?.emailPasswordEnabled ?? true
 
   const [name, setName] = useState(user?.name ?? '')
   const [currentPassword, setCurrentPassword] = useState('')
@@ -101,7 +107,7 @@ function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="个人设置" description="账号资料与安全设置。" />
+      <PageHeader title="个人设置" />
 
       <section className="flex flex-col gap-5 rounded-3xl border border-border-button-default bg-background-primary-default p-6">
         <div className="flex items-center gap-3">
@@ -128,9 +134,15 @@ function SettingsPage() {
             label="昵称"
             value={name}
             onChange={setName}
+            isInvalid={!name.trim()}
+            errorMessage={!name.trim() ? '昵称不能为空' : undefined}
             className="max-w-sm flex-1"
           />
-          <Button variant="secondary" onClick={saveName} disabled={pending}>
+          <Button
+            variant="secondary"
+            onClick={saveName}
+            disabled={pending || !name.trim() || name.trim() === user.name}
+          >
             保存
           </Button>
         </div>
@@ -138,37 +150,42 @@ function SettingsPage() {
 
       <ThirdPartyAccounts />
 
-      <section className="flex flex-col gap-5 rounded-3xl border border-border-button-default bg-background-primary-default p-6">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-title-3-semibold text-text-primary">修改密码</h2>
-          <p className="text-body-regular text-text-secondary">
-            修改后会撤销其他设备上的登录会话。
-          </p>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Input
-            label="当前密码"
-            type="password"
-            value={currentPassword}
-            onChange={setCurrentPassword}
-          />
-          <Input
-            label="新密码"
-            type="password"
-            value={newPassword}
-            onChange={setNewPassword}
-          />
-        </div>
-        <div>
-          <Button
-            variant="secondary"
-            onClick={changePassword}
-            disabled={pending || !currentPassword || !newPassword}
-          >
-            更新密码
-          </Button>
-        </div>
-      </section>
+      {emailPasswordEnabled ? (
+        <section className="flex flex-col gap-5 rounded-3xl border border-border-button-default bg-background-primary-default p-6">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-title-3-semibold text-text-primary">
+              修改密码
+            </h2>
+            <p className="text-body-regular text-text-secondary">
+              修改后会撤销其他设备上的登录会话。
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input
+              label="当前密码"
+              type="password"
+              value={currentPassword}
+              onChange={setCurrentPassword}
+            />
+            <Input
+              label="新密码"
+              type="password"
+              value={newPassword}
+              onChange={setNewPassword}
+              hint="至少 8 位"
+            />
+          </div>
+          <div>
+            <Button
+              variant="secondary"
+              onClick={changePassword}
+              disabled={pending || !currentPassword || !newPassword}
+            >
+              更新密码
+            </Button>
+          </div>
+        </section>
+      ) : null}
 
       <section className="flex flex-col gap-4 rounded-3xl border border-border-button-default bg-background-primary-default p-6">
         <div className="flex flex-col gap-1">

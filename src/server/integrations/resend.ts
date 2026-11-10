@@ -13,7 +13,7 @@ export async function getResend(): Promise<Resend> {
   if (!apiKey) {
     throw new AppError(
       'RESEND_NOT_CONFIGURED',
-      '尚未配置 Resend API Key，请先在管理面板完成配置',
+      '尚未配置 Resend API Key，请先在管理后台完成配置',
     )
   }
   if (!cached || cached.apiKey !== apiKey) {

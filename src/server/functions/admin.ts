@@ -92,20 +92,36 @@ async function getAdminCounts(): Promise<AdminCounts> {
 export const adminOverviewFn = createServerFn({ method: 'GET' }).handler(
   async () =>
     asAdmin(async () => {
-      const [counts, domainRows] = await Promise.all([
-        getAdminCounts(),
-        db
-          .select({
-            id: domains.id,
-            name: domains.name,
-            status: domains.status,
-            isDefault: domains.isDefault,
-          })
-          .from(domains)
-          .orderBy(desc(domains.createdAt)),
-      ])
+      const [counts, domainRows, apiKey, webhookSecret, systemFromAddress] =
+        await Promise.all([
+          getAdminCounts(),
+          db
+            .select({
+              id: domains.id,
+              name: domains.name,
+              status: domains.status,
+              isDefault: domains.isDefault,
+            })
+            .from(domains)
+            .orderBy(desc(domains.createdAt)),
+          getSetting('resend.apiKey'),
+          getSetting('resend.webhookSecret'),
+          getSetting('resend.systemFromAddress'),
+        ])
 
-      return { ...counts, domains: domainRows }
+      return {
+        ...counts,
+        domains: domainRows,
+        health: {
+          resend: Boolean(apiKey || process.env.RESEND_API_KEY?.trim()),
+          webhook: Boolean(
+            webhookSecret || process.env.RESEND_WEBHOOK_SECRET?.trim(),
+          ),
+          systemFrom: Boolean(systemFromAddress),
+          domain: domainRows.some((row) => row.status === 'verified'),
+          cron: Boolean(process.env.CRON_SECRET?.trim()),
+        },
+      }
     }),
 )
 
@@ -148,9 +164,14 @@ export const adminSaveSettingsFn = createServerFn({ method: 'POST' })
       const changed: string[] = []
       await db.transaction(async (tx) => {
         for (const entry of data.entries) {
-          if (!(entry.key in SETTING_DEFS)) continue
-          await setSetting(entry.key as SettingKey, entry.value, actor.id, tx)
-          changed.push(entry.key)
+          const key = entry.key as SettingKey
+          if (!(key in SETTING_DEFS)) continue
+          const previous = await getSetting(key)
+          const next = SETTING_DEFS[key].schema.parse(entry.value)
+          if (JSON.stringify(previous) !== JSON.stringify(next)) {
+            changed.push(key)
+          }
+          await setSetting(key, entry.value, actor.id, tx)
         }
       })
 

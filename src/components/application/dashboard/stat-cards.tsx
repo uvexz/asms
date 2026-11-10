@@ -6,16 +6,8 @@ import { useState, type ComponentType } from "react";
 import {
   RiArrowDownCircleFill,
   RiArrowUpCircleFill,
-  RiBox3Line,
-  RiChatSmile2Line,
-  RiCoinsFill,
-  RiGroupFill,
-  RiGroupLine,
   RiIndeterminateCircleFill,
   RiInformationFill,
-  RiRefund2Fill,
-  RiShoppingBasket2Fill,
-  RiShoppingBasketLine,
 } from "@remixicon/react";
 import { Focusable } from "react-aria-components";
 import { Chip } from "@/components/base/badges/chip";
@@ -59,60 +51,14 @@ export type Stat = {
   hint?: string;
 };
 
-const DEFAULT_STATS: Stat[] = [
-  { icon: RiGroupLine, label: "Customers", value: "14,592", delta: "+5.3%", deltaColor: "lime" },
-  { icon: RiBox3Line, label: "Unit sold", value: "385", delta: "-2.1%", deltaColor: "rose" },
-  { icon: RiShoppingBasketLine, label: "Orders", value: "1,394", delta: "0.00%", deltaColor: "neutral" },
-  { icon: RiChatSmile2Line, label: "Support tickets", value: "708", delta: "+12.8%", deltaColor: "lime" },
-];
-
-const DEFAULT_FOOTER_STATS: Stat[] = [
-  {
-    icon: RiCoinsFill,
-    label: "Total revenue",
-    value: "$152,313.92",
-    delta: "16%",
-    deltaColor: "lime",
-    tone: "blue",
-    hint: "Gross revenue across every channel this month, before refunds. The change is against the same days last month.",
-  },
-  {
-    icon: RiShoppingBasket2Fill,
-    label: "Total orders",
-    value: "25,162",
-    delta: "20%",
-    deltaColor: "lime",
-    tone: "orange",
-    hint: "Checkouts completed this month, repeat purchases included. The change is against the same days last month.",
-  },
-  {
-    icon: RiGroupFill,
-    label: "New customers",
-    value: "3,847",
-    delta: "8.1%",
-    deltaColor: "lime",
-    tone: "purple",
-    hint: "People who bought for the first time this month. The change is against the same days last month.",
-  },
-  {
-    icon: RiRefund2Fill,
-    label: "Refunds",
-    value: "$4,209.44",
-    delta: "2.4%",
-    deltaColor: "rose",
-    tone: "pink",
-    hint: "Value of orders refunded this month. Down is good here, so the change reads in red when refunds rise.",
-  },
-];
-
-/** Gradient stops for the footer variant's icon tile, keyed by tone. */
+/** Semantic status tints for the footer variant's icon tile. */
 const TILE_TONES: Record<StatTone, string> = {
-  blue: "from-blue-500 to-blue-600",
-  orange: "from-orange-400 to-orange-500",
-  purple: "from-purple-500 to-purple-600",
-  pink: "from-pink-500 to-pink-600",
-  sky: "from-sky-400 to-sky-500",
-  emerald: "from-emerald-500 to-emerald-600",
+  blue: "bg-status-blue-background text-status-blue-text",
+  orange: "bg-status-orange-background text-status-orange-text",
+  purple: "bg-status-purple-background text-status-purple-text",
+  pink: "bg-status-rose-background text-status-rose-text",
+  sky: "bg-status-cyan-background text-status-cyan-text",
+  emerald: "bg-status-lime-background text-status-lime-text",
 };
 
 const DELTA_STYLES: Record<
@@ -167,7 +113,7 @@ function StatHint({ label, hint }: { label: string; hint: string }) {
       <Focusable>
         <button
           type="button"
-          aria-label={`About ${label}`}
+          aria-label={`关于 ${label}`}
           onClick={() => setOpen((isOpen) => !isOpen)}
           className="flex shrink-0 cursor-pointer items-center justify-center rounded-full text-foreground-icon-secondary outline-none transition-colors duration-150 ease hover:text-foreground-icon-primary focus-visible:ring-2 focus-visible:ring-border-focus-ring"
         >
@@ -207,11 +153,11 @@ function FooterStatCard({ stat }: { stat: Stat }) {
       <div className="flex w-full items-start justify-between gap-2.5 p-2">
         <span
           className={cx(
-            "flex size-10 shrink-0 items-center justify-center rounded-2lg bg-linear-to-b",
+            "flex size-10 shrink-0 items-center justify-center rounded-2lg",
             TILE_TONES[stat.tone ?? "blue"],
           )}
         >
-          <stat.icon className="size-5 shrink-0 text-white" aria-hidden />
+          <stat.icon className="size-5 shrink-0" aria-hidden />
         </span>
         {stat.hint && <StatHint label={stat.label} hint={stat.hint} />}
       </div>
@@ -247,24 +193,19 @@ function FooterStatCard({ stat }: { stat: Stat }) {
 export function StatCards({
   variant = "plain",
   stats,
-  count,
   columns = 4,
   className,
 }: {
   variant?: StatCardsVariant;
-  /** KPI cards to render; defaults to demo metrics matching the variant. */
-  stats?: Stat[];
-  /** How many KPI cards to render (from the start of the list). */
-  count?: number;
+  /** KPI cards to render. */
+  stats: Stat[];
   /** Columns at the widest breakpoint - 2 keeps the grid two-up for
    *  narrower hosts (docs previews, split layouts), 1 pins a single
    *  column at every width. */
   columns?: 1 | 2 | 4;
   className?: string;
-} = {}) {
+}) {
   const localize = useTemplateCopy();
-  const items =
-    stats ?? (variant === "footer" ? DEFAULT_FOOTER_STATS : DEFAULT_STATS);
   return localize((
     <div
       className={cx(
@@ -280,7 +221,7 @@ export function StatCards({
         className,
       )}
     >
-      {items.slice(0, count ?? items.length).map((stat) =>
+      {stats.map((stat) =>
         variant === "footer" ? (
           <FooterStatCard key={stat.label} stat={stat} />
         ) : (

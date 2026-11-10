@@ -19,7 +19,7 @@ export const Route = createFileRoute('/')({
       {
         name: 'description',
         content:
-          '长期邮箱和一次性地址并存。收件实时入库，发件走 Resend，数据留在你自己的服务器上。',
+          '长期邮箱与临时邮箱并存。收件写入你自己的数据库，发件走 Resend。',
       },
     ],
     links: [{ rel: 'stylesheet', href: landingCss }],
@@ -41,7 +41,7 @@ const CAPABILITIES = [
   },
   {
     term: '临时邮箱',
-    detail: '开一个临时地址，到期自动清理，可以续期。',
+    detail: '开一个临时地址，到期后从列表隐藏，可以续期。',
   },
   {
     term: '发件',
@@ -92,7 +92,7 @@ function LandingPage() {
             </h1>
 
             <p className="landing-enter landing-d-3 max-w-[33rem] text-title-3-regular leading-7 text-text-secondary">
-              收件实时入库，发件走 Resend，数据只留在你自己的服务器上。
+              收件实时入库，发件走 Resend，邮件保存在你自己的数据库里。
             </p>
           </div>
 

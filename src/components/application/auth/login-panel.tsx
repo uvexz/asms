@@ -292,7 +292,7 @@ export function LoginPanel({
             at: the first third-party sign-in is the sign-up. */}
         {!registrationEnabled ? (
           <p className="mt-6 text-center text-caption-1-regular text-text-tertiary">
-            自助注册已关闭，账号由管理员开通。
+            自助注册已关闭，请联系管理员。
           </p>
         ) : emailPasswordEnabled ? (
           <p className="mt-6 text-center text-body-regular text-text-secondary">

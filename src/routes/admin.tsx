@@ -66,7 +66,7 @@ const NAV: DashboardNavItem[] = [
     icon: RiMailCheckLine,
     href: '/admin/ingest',
   },
-  { key: 'back', label: '用户面板', icon: RiArrowLeftLine, href: '/app' },
+  { key: 'back', label: '邮箱面板', icon: RiArrowLeftLine, href: '/app' },
 ]
 
 function selectedKey(pathname: string) {
@@ -129,7 +129,7 @@ function AdminLayout() {
           <Link to="/admin" className="flex items-center gap-2">
             <SiteMark logoUrl={site.logoUrl} siteName={site.siteName} />
             <span className="text-body-medium text-text-primary">
-              {site.siteName} 管理
+              {site.siteName} 管理后台
             </span>
           </Link>
           <IconButton

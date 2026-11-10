@@ -168,7 +168,7 @@ export function DashboardUserMenu({
             {isAdmin && onAdmin ? (
               <MenuRow
                 icon={RiShieldUserLine}
-                label="管理面板"
+                label="管理后台"
                 onClick={() => {
                   setIsOpen(false);
                   onAdmin();

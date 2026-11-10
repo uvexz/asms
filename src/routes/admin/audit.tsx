@@ -12,7 +12,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/base/table/table'
-import { EmptyState, PageHeader } from '@/components/app/page-header'
+import {
+  EmptyState,
+  ErrorState,
+  PageHeader,
+} from '@/components/app/page-header'
 import { TablePagination } from '@/components/app/table-pagination'
 import { auditActionLabel, auditTargetLabel } from '@/lib/admin-labels'
 import { formatFullDateTime } from '@/lib/format'
@@ -33,13 +37,20 @@ function AdminAuditPage() {
 
   const items = list.data?.ok ? list.data.data.items : []
   const total = list.data?.ok ? list.data.data.total : 0
+  const listError = list.data && !list.data.ok ? list.data.message : undefined
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="审计日志" description="管理操作与敏感读取记录。" />
+      <PageHeader title="审计日志" description="管理操作记录。" />
 
       {list.isLoading ? (
         <Skeleton className="h-64 w-full" />
+      ) : list.isError || Boolean(listError) ? (
+        <ErrorState
+          title="无法加载审计日志"
+          description={listError}
+          onRetry={() => void list.refetch()}
+        />
       ) : items.length === 0 ? (
         <EmptyState title="还没有审计记录" />
       ) : (

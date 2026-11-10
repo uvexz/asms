@@ -12,8 +12,13 @@ import {
   adminSettingsFn,
   adminUsersFn,
 } from '@/server/functions/admin'
+import { fetchPublicConfig } from '@/server/functions/auth'
 import { fetchOverview } from '@/server/functions/dashboard'
-import { listDomainsFn, listMailboxesFn } from '@/server/functions/mailboxes'
+import {
+  fetchMailPolicyFn,
+  listDomainsFn,
+  listMailboxesFn,
+} from '@/server/functions/mailboxes'
 import { getMessageFn, listMessagesFn } from '@/server/functions/messages'
 import { getSentFn, listSentFn, sendUsageFn } from '@/server/functions/send'
 
@@ -56,8 +61,10 @@ export const REFRESH_INTERVAL = {
 export const queryKeys = {
   /** Client-only marker: which account currently owns the cache. */
   authUser: ['auth', 'user'] as const,
+  publicConfig: ['auth', 'config'] as const,
   overview: ['mail', 'overview'] as const,
   mailboxes: ['mail', 'mailboxes'] as const,
+  mailPolicy: ['mail', 'policy'] as const,
   domains: ['mail', 'domains'] as const,
   messages: ['mail', 'messages'] as const,
   message: (id: string) => ['mail', 'message', id] as const,
@@ -79,6 +86,14 @@ export const queryKeys = {
 /* -------------------------------------------------------------------------- */
 /* User mail                                                                   */
 /* -------------------------------------------------------------------------- */
+
+export function publicConfigQuery() {
+  return queryOptions({
+    queryKey: queryKeys.publicConfig,
+    queryFn: () => fetchPublicConfig(),
+    staleTime: STALE_TIME.reference,
+  })
+}
 
 export function overviewQuery() {
   return queryOptions({
@@ -106,6 +121,15 @@ export function domainsQuery() {
   return queryOptions({
     queryKey: queryKeys.domains,
     queryFn: () => listDomainsFn(),
+    staleTime: STALE_TIME.reference,
+  })
+}
+
+/** Admin-configured limits the client phrases in its own copy. */
+export function mailPolicyQuery() {
+  return queryOptions({
+    queryKey: queryKeys.mailPolicy,
+    queryFn: () => fetchMailPolicyFn(),
     staleTime: STALE_TIME.reference,
   })
 }
@@ -320,5 +344,9 @@ export function invalidateDomains(client: QueryClient) {
  * `router.invalidate()` after this to re-read the branding.
  */
 export function invalidateSettings(client: QueryClient) {
-  return client.invalidateQueries({ queryKey: queryKeys.adminSettings })
+  return Promise.all([
+    client.invalidateQueries({ queryKey: queryKeys.adminSettings }),
+    client.invalidateQueries({ queryKey: queryKeys.mailPolicy }),
+    client.invalidateQueries({ queryKey: queryKeys.publicConfig }),
+  ])
 }

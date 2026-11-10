@@ -3,12 +3,14 @@ import { z } from 'zod'
 
 import { asUser } from '../session'
 import {
+  MAX_TEMP_MAILBOXES,
   createMailbox,
   deleteMailbox,
   domainsForUser,
   listMailboxes,
   renewTempMailbox,
 } from '../services/mailboxes'
+import { getMailPolicy, getSetting } from '../settings'
 
 export const listMailboxesFn = createServerFn({ method: 'GET' }).handler(
   async () => asUser(({ user }) => listMailboxes(user.id)),
@@ -16,6 +18,32 @@ export const listMailboxesFn = createServerFn({ method: 'GET' }).handler(
 
 export const listDomainsFn = createServerFn({ method: 'GET' }).handler(
   async () => asUser(() => domainsForUser()),
+)
+
+/** The subset of the admin mail policy the client needs to phrase its own
+ *  limits. Reserved prefixes stay server-side. */
+export const fetchMailPolicyFn = createServerFn({ method: 'GET' }).handler(
+  async () =>
+    asUser(async ({ user }) => {
+      const [policy, timezone] = await Promise.all([
+        getMailPolicy(),
+        getSetting('site.timezone'),
+      ])
+      return {
+        minPrefixPermanent: policy.minPrefixPermanent,
+        minPrefixTemp: policy.minPrefixTemp,
+        maxPrefixLength: policy.maxPrefixLength,
+        tempTtlMinutes: policy.tempTtlMinutes,
+        tempMaxLifetimeMinutes: policy.tempMaxLifetimeMinutes,
+        permanentCooldownDays: policy.permanentCooldownDays,
+        maxPermanentMailboxes: policy.maxPermanentMailboxes,
+        maxTempMailboxes: MAX_TEMP_MAILBOXES,
+        dailySendLimit: policy.dailySendLimit,
+        allowTempSending: policy.allowTempSending,
+        timezone,
+        isAdmin: user.role === 'admin',
+      }
+    }),
 )
 
 export const createMailboxFn = createServerFn({ method: 'POST' })

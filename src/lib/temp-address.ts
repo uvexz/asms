@@ -116,9 +116,16 @@ function pickIndex(length: number) {
   return crypto.getRandomValues(new Uint32Array(1))[0] % length
 }
 
-export function randomTempLocalPart(): string {
+export function randomTempLocalPart(minLength = 8): string {
   const given = GIVEN_NAMES[pickIndex(GIVEN_NAMES.length)]
   const family = FAMILY_NAMES[pickIndex(FAMILY_NAMES.length)]
   const suffix = SUFFIX_START + pickIndex(SUFFIX_RANGE)
-  return `${given}-${family}${suffix}`
+  const base = `${given}-${family}${suffix}`
+  if (base.length >= minLength) return base
+
+  let padded = base
+  while (padded.length < minLength) {
+    padded += String(pickIndex(10))
+  }
+  return padded
 }

@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 import { AuthShell } from '@/components/application/auth/auth-shell'
 import { ButtonLink } from '@/components/base/buttons/button'
 
@@ -14,12 +16,14 @@ import { ButtonLink } from '@/components/base/buttons/button'
 export function AuthClosed({
   title,
   description,
+  brand,
 }: {
   title: string
   description: string
+  brand?: ReactNode
 }) {
   return (
-    <AuthShell title={title} description={description}>
+    <AuthShell title={title} description={description} brand={brand}>
       <ButtonLink href="/login">前往登录</ButtonLink>
     </AuthShell>
   )

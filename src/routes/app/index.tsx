@@ -21,7 +21,11 @@ import {
 } from '@/components/app/mailbox/create-modals'
 import { DomainNotice } from '@/components/app/mailbox/domain-notice'
 import type { MailboxKind } from '@/components/app/mailbox/types'
-import { EmptyState, PageHeader } from '@/components/app/page-header'
+import {
+  EmptyState,
+  ErrorState,
+  PageHeader,
+} from '@/components/app/page-header'
 import { formatRelative } from '@/lib/format'
 import { headTitle } from '@/lib/site'
 import { domainsQuery, overviewQuery } from '@/lib/queries'
@@ -34,7 +38,7 @@ export const Route = createFileRoute('/app/')({
 function OverviewPage() {
   const router = useRouter()
   const [createKind, setCreateKind] = useState<MailboxKind | null>(null)
-  const { data, isLoading } = useQuery(overviewQuery())
+  const { data, isLoading, isError, refetch } = useQuery(overviewQuery())
   const domains = useQuery(domainsQuery())
 
   const canCreate = domains.data?.ok ? domains.data.data.length > 0 : true
@@ -59,11 +63,12 @@ function OverviewPage() {
     )
   }
 
-  if (!data?.ok) {
+  if (isError || !data?.ok) {
     return (
-      <EmptyState
+      <ErrorState
         title="无法加载概览"
-        description={data && !data.ok ? data.message : '请刷新页面重试'}
+        description={data && !data.ok ? data.message : undefined}
+        onRetry={() => void refetch()}
       />
     )
   }
@@ -112,7 +117,6 @@ function OverviewPage() {
       <div className="flex flex-col gap-3">
         <PageHeader
           title="概览"
-          description="邮箱、收件与发件额度一览。"
           actions={
             <>
               <Button
