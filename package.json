@@ -9,7 +9,7 @@
     "dev": "vite dev --port 3000",
     "generate-routes": "vite build",
     "build": "vite build",
-    "start": "node .output/server/index.mjs",
+    "start": "NODE_ENV=production node .output/server/index.mjs",
     "preview": "vite preview",
     "lint": "eslint",
     "format": "prettier --write . && eslint --fix",

@@ -39,6 +39,7 @@ import { headTitle } from '@/lib/site'
 import { deleteMailboxFn, renewMailboxFn } from '@/server/functions/mailboxes'
 import { deleteMessageFn, markMessageFn } from '@/server/functions/messages'
 import type { Result } from '@/server/result'
+import type { MailboxDto } from '@/server/services/mailboxes'
 
 const PAGE_SIZE = 20
 
@@ -115,12 +116,18 @@ function MailboxesPage() {
   const detail = useQuery(messageQuery(messageId))
 
   const mark = useMutation({
-    mutationFn: (input: { id: string; isRead: boolean }) =>
-      markMessageFn({ data: input }),
-    // Opening a message flips one flag. Patching the two caches that show it
+    mutationFn: (input: { id: string; mailboxId: string; isRead: boolean }) =>
+      markMessageFn({ data: { id: input.id, isRead: input.isRead } }),
+    // Opening a message flips one flag. Patching the caches that show it
     // keeps the whole list from being re-read just to repaint one row; the
-    // unread counters still come from the server, because they are sums.
-    onMutate: ({ id, isRead }) => {
+    // 15s/30s polls reconcile the server-owned unread sums.
+    onMutate: ({ id, mailboxId: targetMailboxId, isRead }) => {
+      const previous = queryClient.getQueryData<Result<MessageDetailData>>(
+        queryKeys.message(id),
+      )
+      const wasRead = previous?.ok ? previous.data.isRead : isRead
+      const delta = wasRead === isRead ? 0 : isRead ? -1 : 1
+
       queryClient.setQueryData<Result<MessageDetailData>>(
         queryKeys.message(id),
         (current) =>
@@ -136,12 +143,25 @@ function MailboxesPage() {
             ),
           })),
       )
+      if (delta !== 0) {
+        queryClient.setQueryData<Result<MailboxDto[]>>(
+          queryKeys.mailboxes,
+          (current) =>
+            patchResult(current, (items) =>
+              items.map((mailbox) =>
+                mailbox.id === targetMailboxId
+                  ? { ...mailbox, unread: Math.max(0, mailbox.unread + delta) }
+                  : mailbox,
+              ),
+            ),
+        )
+      }
     },
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.mailboxes }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.overview }),
-      ])
+    onError: () => {
+      // A failed write invalidates the optimistic patches; let the next poll
+      // paint the authoritative counters.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.mailboxes })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.overview })
     },
   })
 
@@ -219,7 +239,11 @@ function MailboxesPage() {
 
   useEffect(() => {
     if (message && !message.isRead) {
-      mark.mutate({ id: message.id, isRead: true })
+      mark.mutate({
+        id: message.id,
+        mailboxId: message.mailboxId,
+        isRead: true,
+      })
     }
   }, [message?.id])
 
@@ -449,7 +473,11 @@ function MailboxesPage() {
           onBack={() => selectMessage(undefined)}
           onToggleRead={() => {
             if (message) {
-              mark.mutate({ id: message.id, isRead: !message.isRead })
+              mark.mutate({
+                id: message.id,
+                mailboxId: message.mailboxId,
+                isRead: !message.isRead,
+              })
             }
           }}
           onDelete={() => setDeletingMessage(true)}

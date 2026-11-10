@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 
 import { db } from '#/db'
@@ -33,6 +33,7 @@ export type ResendReceivedEvent = {
 const MAX_BODY_BYTES = 1024 * 1024
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 const MAX_TOTAL_ATTACHMENT_BYTES = 30 * 1024 * 1024
+const MAX_ATTACHMENTS = 25
 
 function truncate(
   value: string | null | undefined,
@@ -100,10 +101,9 @@ async function persistAttachments(input: {
   const resend = await getResend()
   let total = 0
 
-  for (const file of input.files) {
+  for (const [index, file] of input.files.entries()) {
     const attachmentId = randomUUID()
-    const filename =
-      file.filename || `attachment-${input.files.indexOf(file) + 1}`
+    const filename = file.filename || `attachment-${index + 1}`
     let stored = false
     let storageKey: string | null = null
 
@@ -209,6 +209,31 @@ export async function ingestReceivedEmail(
     return { stored: 0, skipped: recipients.length }
   }
 
+  // Webhook retries should not download the same body and attachments again.
+  // Check every matched mailbox before paying for the content fetch.
+  const mailboxIds = Array.from(
+    new Set(matches.map((match) => match.mailbox.id)),
+  )
+  const existing = await db
+    .select({ mailboxId: messages.mailboxId })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.resendEmailId, data.email_id),
+        inArray(messages.mailboxId, mailboxIds),
+      ),
+    )
+  const alreadyStored = new Set(existing.map((row) => row.mailboxId))
+  if (mailboxIds.every((id) => alreadyStored.has(id))) {
+    await logIngest({
+      resendEmailId: data.email_id,
+      recipients,
+      result: 'duplicate',
+      detail: 'all recipients already stored',
+    })
+    return { stored: 0, skipped: matches.length }
+  }
+
   const resend = await getResend()
   const content = await enqueueResend(() =>
     resend.emails.receiving.get(data.email_id),
@@ -232,54 +257,66 @@ export async function ingestReceivedEmail(
     email.created_at || data.created_at || event.created_at || Date.now(),
   )
 
+  // Everything below is identical for every mailbox the message was sent to.
+  const textBody = truncate(email.text, MAX_BODY_BYTES)
+  const htmlBody = truncate(email.html, MAX_BODY_BYTES)
+  const snippet = makeSnippet(textBody, htmlBody)
+  const headersJson = truncate(
+    email.headers ? JSON.stringify(email.headers) : null,
+    64 * 1024,
+  )
+  const toJson = JSON.stringify(email.to ?? data.to ?? [])
+  const ccJson = JSON.stringify(email.cc ?? data.cc ?? [])
+  const bccJson = JSON.stringify(email.bcc ?? data.bcc ?? [])
+  const replyToJson = JSON.stringify(email.reply_to ?? [])
+  const subject = email.subject || data.subject || '(无主题)'
+  const sizeBytes =
+    Buffer.byteLength(textBody ?? '', 'utf8') +
+    Buffer.byteLength(htmlBody ?? '', 'utf8')
+  const hasAttachments = (email.attachments?.length ?? 0) > 0
+  const files = (email.attachments ?? []).slice(0, MAX_ATTACHMENTS)
+
   let stored = 0
   let skipped = 0
 
   for (const match of matches) {
-    const duplicate = await db
-      .select({ id: messages.id })
-      .from(messages)
-      .where(
-        and(
-          eq(messages.resendEmailId, data.email_id),
-          eq(messages.mailboxId, match.mailbox.id),
-        ),
-      )
-      .get()
-
-    if (duplicate) {
+    if (alreadyStored.has(match.mailbox.id)) {
       skipped += 1
       continue
     }
 
     const messageId = randomUUID()
-    const textBody = truncate(email.text, MAX_BODY_BYTES)
-    const htmlBody = truncate(email.html, MAX_BODY_BYTES)
-    const headersJson = truncate(
-      email.headers ? JSON.stringify(email.headers) : null,
-      64 * 1024,
-    )
+    // The unique (resend_email_id, mailbox_id) index settles a race between
+    // two webhook deliveries; no read-before-write window is needed.
+    const inserted = await db
+      .insert(messages)
+      .values({
+        id: messageId,
+        mailboxId: match.mailbox.id,
+        resendEmailId: data.email_id,
+        fromAddress: from.address,
+        fromName: from.name,
+        toJson,
+        ccJson,
+        bccJson,
+        replyToJson,
+        subject,
+        snippet,
+        textBody,
+        htmlBody,
+        headersJson,
+        sizeBytes,
+        hasAttachments,
+        isRead: false,
+        receivedAt,
+      })
+      .onConflictDoNothing()
+      .returning({ id: messages.id })
 
-    await db.insert(messages).values({
-      id: messageId,
-      mailboxId: match.mailbox.id,
-      resendEmailId: data.email_id,
-      fromAddress: from.address,
-      fromName: from.name,
-      toJson: JSON.stringify(email.to ?? data.to ?? []),
-      ccJson: JSON.stringify(email.cc ?? data.cc ?? []),
-      bccJson: JSON.stringify(email.bcc ?? data.bcc ?? []),
-      replyToJson: JSON.stringify(email.reply_to ?? []),
-      subject: email.subject || data.subject || '(无主题)',
-      snippet: makeSnippet(textBody, htmlBody),
-      textBody,
-      htmlBody,
-      headersJson,
-      sizeBytes: (textBody?.length ?? 0) + (htmlBody?.length ?? 0),
-      hasAttachments: (email.attachments?.length ?? 0) > 0,
-      isRead: false,
-      receivedAt,
-    })
+    if (inserted.length === 0) {
+      skipped += 1
+      continue
+    }
 
     await db
       .update(mailboxes)
@@ -290,7 +327,7 @@ export async function ingestReceivedEmail(
       await persistAttachments({
         emailId: data.email_id,
         messageId,
-        files: email.attachments ?? [],
+        files,
         canStore,
       })
     } catch (error) {

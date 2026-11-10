@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, lte, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gt, inArray, sql } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 
 import { db } from '#/db'
@@ -14,6 +14,25 @@ import { AppError, assert } from '../result'
 import { getMailPolicy } from '../settings'
 
 type MailboxRow = typeof mailboxes.$inferSelect
+
+/** Enough for one-off signups; stops an account from turning the rail into a
+ * thousands-row `IN (...)` query and an unbounded storage sink. */
+const MAX_TEMP_MAILBOXES = 20
+
+/** Display names go into an RFC 5322 `From` header, so control characters and
+ * delimiters have to be removed before they reach Resend. */
+export function sanitizeDisplayName(value: string | null | undefined): string {
+  return [...(value ?? '')]
+    .filter((char) => {
+      const code = char.codePointAt(0) ?? 0
+      return code >= 32 && code !== 127
+    })
+    .join('')
+    .replace(/["<>]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80)
+}
 
 export type MailboxDto = {
   id: string
@@ -251,13 +270,36 @@ export async function createMailbox(input: {
   const domain = await findAvailableDomain(input.kind, input.domainId)
   const isAdmin = input.role === 'admin'
 
-  if (input.kind === 'permanent' && !isAdmin) {
-    const used = await countPermanent(input.userId)
-    assert(
-      used < policy.maxPermanentMailboxes,
-      'MAILBOX_LIMIT_REACHED',
-      `长期邮箱数量已达上限（${policy.maxPermanentMailboxes} 个）`,
-    )
+  if (!isAdmin) {
+    if (input.kind === 'permanent') {
+      const used = await countPermanent(input.userId)
+      assert(
+        used < policy.maxPermanentMailboxes,
+        'MAILBOX_LIMIT_REACHED',
+        `长期邮箱数量已达上限（${policy.maxPermanentMailboxes} 个）`,
+      )
+    } else {
+      const activeTemp =
+        (
+          await db
+            .select({ value: count() })
+            .from(mailboxes)
+            .where(
+              and(
+                eq(mailboxes.userId, input.userId),
+                eq(mailboxes.kind, 'temporary'),
+                eq(mailboxes.status, 'active'),
+                gt(mailboxes.expiresAt, new Date()),
+              ),
+            )
+            .get()
+        )?.value ?? 0
+      assert(
+        activeTemp < MAX_TEMP_MAILBOXES,
+        'MAILBOX_LIMIT_REACHED',
+        `临时邮箱数量已达上限（${MAX_TEMP_MAILBOXES} 个）`,
+      )
+    }
   }
 
   const existing = await db
@@ -319,7 +361,7 @@ export async function createMailbox(input: {
     localPart,
     domainId: domain.id,
     kind: input.kind,
-    displayName: input.displayName?.trim() || null,
+    displayName: sanitizeDisplayName(input.displayName) || null,
     expiresAt,
     renewCount: 0,
     status: 'active',
@@ -420,12 +462,8 @@ export async function renewTempMailbox(
   return { ...mailbox, expiresAt: new Date(nextExpiry).toISOString() }
 }
 
-export async function deleteMailbox(
-  userId: string,
-  mailboxId: string,
-): Promise<void> {
+async function removeMailboxRow(row: MailboxRow): Promise<void> {
   const policy = await getMailPolicy()
-  const { row } = await getMailboxForUser(userId, mailboxId)
 
   if (row.kind === 'permanent' && policy.permanentCooldownDays > 0) {
     const now = Date.now()
@@ -446,8 +484,30 @@ export async function deleteMailbox(
       })
   }
 
-  await deleteMailboxStorage(mailboxId)
-  await db.delete(mailboxes).where(eq(mailboxes.id, mailboxId))
+  await deleteMailboxStorage(row.id)
+  await db.delete(mailboxes).where(eq(mailboxes.id, row.id))
+}
+
+export async function deleteMailbox(
+  userId: string,
+  mailboxId: string,
+): Promise<void> {
+  const { row } = await getMailboxForUser(userId, mailboxId)
+  await removeMailboxRow(row)
+}
+
+/** The admin path keeps the same release/storage rules as the owner path. */
+export async function deleteMailboxAsAdmin(
+  mailboxId: string,
+): Promise<MailboxRow> {
+  const row = await db
+    .select()
+    .from(mailboxes)
+    .where(eq(mailboxes.id, mailboxId))
+    .get()
+  assert(row, 'MAILBOX_NOT_FOUND', '邮箱不存在')
+  await removeMailboxRow(row)
+  return row
 }
 
 export async function findMailboxByAddress(
@@ -468,25 +528,6 @@ export async function findMailboxByAddress(
     .get()
 
   return row?.mailbox ?? null
-}
-
-export async function listActiveTemporaryIds(limit = 500): Promise<string[]> {
-  const rows = await db
-    .select({ id: mailboxes.id })
-    .from(mailboxes)
-    .where(
-      and(
-        eq(mailboxes.kind, 'temporary'),
-        lte(mailboxes.expiresAt, new Date()),
-      ),
-    )
-    .limit(limit)
-  return rows.map((row) => row.id)
-}
-
-export async function listMailboxesByIds(ids: string[]) {
-  if (ids.length === 0) return []
-  return db.select().from(mailboxes).where(inArray(mailboxes.id, ids))
 }
 
 export async function domainsForUser() {

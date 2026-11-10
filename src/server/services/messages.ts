@@ -24,7 +24,6 @@ export type MessageListItem = {
 export type MessageDetail = MessageListItem & {
   to: string[]
   cc: string[]
-  bcc: string[]
   textBody: string | null
   htmlBody: string | null
   attachments: Array<{
@@ -46,6 +45,11 @@ function parseList(value: string | null): string[] {
   }
 }
 
+function assertMailboxUsable(row: typeof mailboxes.$inferSelect) {
+  assert(row.status === 'active', 'MAILBOX_DISABLED', '邮箱已停用')
+  assert(!isExpired(row), 'MAILBOX_EXPIRED', '临时邮箱已过期')
+}
+
 async function assertMailboxOwner(userId: string, mailboxId: string) {
   const row = await db
     .select()
@@ -53,6 +57,7 @@ async function assertMailboxOwner(userId: string, mailboxId: string) {
     .where(and(eq(mailboxes.id, mailboxId), eq(mailboxes.userId, userId)))
     .get()
   assert(row, 'MAILBOX_NOT_FOUND', '邮箱不存在')
+  assertMailboxUsable(row)
   return row
 }
 
@@ -112,7 +117,16 @@ export async function listMessages(input: {
   const [rows, totalRow] = await Promise.all([
     db
       .select({
-        message: messages,
+        id: messages.id,
+        mailboxId: messages.mailboxId,
+        fromAddress: messages.fromAddress,
+        fromName: messages.fromName,
+        subject: messages.subject,
+        snippet: messages.snippet,
+        isRead: messages.isRead,
+        isStarred: messages.isStarred,
+        hasAttachments: messages.hasAttachments,
+        receivedAt: messages.receivedAt,
         localPart: mailboxes.localPart,
         domain: domains.name,
         kind: mailboxes.kind,
@@ -128,18 +142,18 @@ export async function listMessages(input: {
   ])
 
   const items: MessageListItem[] = rows.map((row) => ({
-    id: row.message.id,
-    mailboxId: row.message.mailboxId,
+    id: row.id,
+    mailboxId: row.mailboxId,
     mailboxAddress: formatAddress(row.localPart, row.domain),
     mailboxKind: row.kind === 'temporary' ? 'temporary' : 'permanent',
-    fromAddress: row.message.fromAddress,
-    fromName: row.message.fromName,
-    subject: row.message.subject,
-    snippet: row.message.snippet,
-    isRead: row.message.isRead,
-    isStarred: row.message.isStarred,
-    hasAttachments: row.message.hasAttachments,
-    receivedAt: row.message.receivedAt.toISOString(),
+    fromAddress: row.fromAddress,
+    fromName: row.fromName,
+    subject: row.subject,
+    snippet: row.snippet,
+    isRead: row.isRead,
+    isStarred: row.isStarred,
+    hasAttachments: row.hasAttachments,
+    receivedAt: row.receivedAt.toISOString(),
   }))
 
   return {
@@ -190,7 +204,9 @@ export async function getMessage(
     receivedAt: row.message.receivedAt.toISOString(),
     to: parseList(row.message.toJson),
     cc: parseList(row.message.ccJson),
-    bcc: parseList(row.message.bccJson),
+    // BCC is envelope data: returning it would tell every recipient who else
+    // was hidden on the same message. It stays in the database for auditing
+    // but is not part of the recipient-facing detail.
     textBody: row.message.textBody,
     htmlBody: row.message.htmlBody,
     attachments: files.map((file) => ({
@@ -209,12 +225,13 @@ export async function markMessage(
   patch: { isRead?: boolean; isStarred?: boolean },
 ) {
   const row = await db
-    .select({ id: messages.id })
+    .select({ id: messages.id, mailbox: mailboxes })
     .from(messages)
     .innerJoin(mailboxes, eq(messages.mailboxId, mailboxes.id))
     .where(and(eq(messages.id, messageId), eq(mailboxes.userId, userId)))
     .get()
   assert(row, 'MESSAGE_NOT_FOUND', '邮件不存在')
+  assertMailboxUsable(row.mailbox)
 
   await db.update(messages).set(patch).where(eq(messages.id, messageId))
 }
@@ -229,12 +246,13 @@ export async function markAllRead(userId: string, mailboxId: string) {
 
 export async function deleteMessage(userId: string, messageId: string) {
   const row = await db
-    .select({ id: messages.id })
+    .select({ id: messages.id, mailbox: mailboxes })
     .from(messages)
     .innerJoin(mailboxes, eq(messages.mailboxId, mailboxes.id))
     .where(and(eq(messages.id, messageId), eq(mailboxes.userId, userId)))
     .get()
   assert(row, 'MESSAGE_NOT_FOUND', '邮件不存在')
+  assertMailboxUsable(row.mailbox)
 
   const files = await db
     .select({ storageKey: attachments.storageKey })
@@ -262,5 +280,6 @@ export async function getAttachmentForUser(
     .get()
 
   assert(row, 'ATTACHMENT_NOT_FOUND', '附件不存在')
+  assertMailboxUsable(row.mailbox)
   return row
 }

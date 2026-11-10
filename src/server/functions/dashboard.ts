@@ -48,8 +48,14 @@ export const fetchOverview = createServerFn({ method: 'GET' }).handler(
         ids.length > 0
           ? db
               .select({
-                message: messages,
-                mailbox: mailboxes,
+                id: messages.id,
+                subject: messages.subject,
+                fromAddress: messages.fromAddress,
+                fromName: messages.fromName,
+                isRead: messages.isRead,
+                receivedAt: messages.receivedAt,
+                mailboxId: mailboxes.id,
+                localPart: mailboxes.localPart,
                 domain: domains.name,
               })
               .from(messages)
@@ -75,14 +81,14 @@ export const fetchOverview = createServerFn({ method: 'GET' }).handler(
         unread: unreadRow?.value ?? 0,
         usage,
         recent: recentRows.map((row) => ({
-          id: row.message.id,
-          subject: row.message.subject,
-          fromAddress: row.message.fromAddress,
-          fromName: row.message.fromName,
-          isRead: row.message.isRead,
-          receivedAt: row.message.receivedAt.toISOString(),
-          mailboxAddress: `${row.mailbox.localPart}@${row.domain}`,
-          mailboxId: row.mailbox.id,
+          id: row.id,
+          subject: row.subject,
+          fromAddress: row.fromAddress,
+          fromName: row.fromName,
+          isRead: row.isRead,
+          receivedAt: row.receivedAt.toISOString(),
+          mailboxAddress: `${row.localPart}@${row.domain}`,
+          mailboxId: row.mailboxId,
         })),
       }
     }),

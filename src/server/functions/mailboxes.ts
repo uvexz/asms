@@ -22,7 +22,7 @@ export const createMailboxFn = createServerFn({ method: 'POST' })
   .validator(
     z.object({
       localPart: z.string().min(1).max(64),
-      domainId: z.string().optional(),
+      domainId: z.string().max(128).optional(),
       kind: z.enum(['permanent', 'temporary']),
       displayName: z.string().max(80).optional(),
     }),
@@ -41,13 +41,13 @@ export const createMailboxFn = createServerFn({ method: 'POST' })
   )
 
 export const renewMailboxFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ id: z.string() }))
+  .validator(z.object({ id: z.string().max(128) }))
   .handler(async ({ data }) =>
     asUser(({ user }) => renewTempMailbox(user.id, data.id)),
   )
 
 export const deleteMailboxFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ id: z.string() }))
+  .validator(z.object({ id: z.string().max(128) }))
   .handler(async ({ data }) =>
     asUser(async ({ user }) => {
       await deleteMailbox(user.id, data.id)

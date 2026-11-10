@@ -10,7 +10,10 @@ const INGEST_RESULTS: Record<string, { label: string; hint: string }> = {
   no_mailbox: { label: '未命中邮箱', hint: '收件地址不存在或已被删除' },
   mailbox_expired: { label: '邮箱已过期', hint: '临时邮箱超过有效期' },
   mailbox_disabled: { label: '邮箱已停用', hint: '地址存在但当前不可收件' },
-  content_fetch_failed: { label: '正文获取失败', hint: '向 Resend 拉取正文时出错' },
+  content_fetch_failed: {
+    label: '正文获取失败',
+    hint: '向 Resend 拉取正文时出错',
+  },
 }
 
 export function ingestResultLabel(value: string) {

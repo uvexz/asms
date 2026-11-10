@@ -71,7 +71,9 @@ function SetupPage() {
       ) : (
         <>
           <div className="rounded-2xl bg-background-secondary-default p-4">
-            <p className="text-caption-1-regular text-text-tertiary">当前账号</p>
+            <p className="text-caption-1-regular text-text-tertiary">
+              当前账号
+            </p>
             <p className="text-body-medium text-text-primary">
               {session.user.name}
             </p>

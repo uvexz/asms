@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { RiMailSendLine } from '@remixicon/react'
 
 import { Chip } from '@/components/base/badges/chip'
@@ -39,6 +39,9 @@ function ComposePage() {
   const [bcc, setBcc] = useState('')
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
+  // Reuse the id across a transport retry so Resend can deduplicate a request
+  // whose response was lost. A definite failure starts a fresh attempt.
+  const requestId = useRef(crypto.randomUUID())
   const [errors, setErrors] = useState<{
     to?: string
     subject?: string
@@ -75,17 +78,19 @@ function ComposePage() {
           bcc: parseRecipients(bcc),
           subject,
           text: body,
-          requestId: crypto.randomUUID(),
+          requestId: requestId.current,
         },
       }),
     onSuccess: async (result) => {
       if (!result.ok) {
+        requestId.current = crypto.randomUUID()
         toast.error('发送失败', { description: result.message })
         return
       }
       toast.success('邮件已提交', {
         description: `Resend 已接受，状态：${result.data.status}`,
       })
+      requestId.current = crypto.randomUUID()
       setTo('')
       setCc('')
       setBcc('')

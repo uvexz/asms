@@ -1,5 +1,5 @@
 import {
-  DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -110,21 +110,52 @@ export async function getDownloadUrl(
   )
 }
 
-export async function deleteObject(key: string): Promise<void> {
+const DELETE_BATCH_SIZE = 1000
+
+async function deleteObjectBatches(keys: string[]): Promise<string[]> {
   const { client, bucket } = await getClient()
-  await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
+  const failed: string[] = []
+
+  for (let offset = 0; offset < keys.length; offset += DELETE_BATCH_SIZE) {
+    const batch = keys.slice(offset, offset + DELETE_BATCH_SIZE)
+    const result = await client.send(
+      new DeleteObjectsCommand({
+        Bucket: bucket,
+        Delete: {
+          Objects: batch.map((key) => ({ Key: key })),
+          Quiet: true,
+        },
+      }),
+    )
+    for (const error of result.Errors ?? []) {
+      if (error.Key) failed.push(error.Key)
+      console.error('[asms] delete object failed', error.Key, error.Code)
+    }
+  }
+
+  return failed
 }
 
+/** Best effort: storage cleanup must not block deleting the database row. */
 export async function deleteObjects(keys: string[]): Promise<void> {
   if (keys.length === 0) return
   const config = await getS3Config()
   if (!isS3Configured(config)) return
-  for (const key of keys) {
-    try {
-      await deleteObject(key)
-    } catch (error) {
-      console.error('[asms] delete object failed', key, error)
-    }
+  try {
+    await deleteObjectBatches(keys)
+  } catch (error) {
+    console.error('[asms] delete object batch failed', error)
+  }
+}
+
+/** Throws when storage still holds objects, so cleanup can retry next run. */
+export async function deleteObjectsStrict(keys: string[]): Promise<void> {
+  if (keys.length === 0) return
+  const config = await getS3Config()
+  if (!isS3Configured(config)) return
+  const failed = await deleteObjectBatches(keys)
+  if (failed.length > 0) {
+    throw new Error(`[asms] ${failed.length} objects were not deleted`)
   }
 }
 

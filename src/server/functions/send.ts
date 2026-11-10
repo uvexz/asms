@@ -9,10 +9,10 @@ import { getSetting } from '../settings'
 export const sendMailFn = createServerFn({ method: 'POST' })
   .validator(
     z.object({
-      mailboxId: z.string(),
-      to: z.array(z.string()).min(1).max(10),
-      cc: z.array(z.string()).max(10).optional(),
-      bcc: z.array(z.string()).max(10).optional(),
+      mailboxId: z.string().max(128),
+      to: z.array(z.string().max(320)).min(1).max(10),
+      cc: z.array(z.string().max(320)).max(10).optional(),
+      bcc: z.array(z.string().max(320)).max(10).optional(),
       subject: z.string().max(200),
       text: z.string().max(100_000),
       requestId: z.string().uuid(),
@@ -31,7 +31,7 @@ export const sendMailFn = createServerFn({ method: 'POST' })
 export const listSentFn = createServerFn({ method: 'GET' })
   .validator(
     z.object({
-      page: z.number().int().min(1).optional(),
+      page: z.number().int().min(1).max(1000).optional(),
       pageSize: z.number().int().min(1).max(50).optional(),
     }),
   )
@@ -40,7 +40,7 @@ export const listSentFn = createServerFn({ method: 'GET' })
   )
 
 export const getSentFn = createServerFn({ method: 'GET' })
-  .validator(z.object({ id: z.string() }))
+  .validator(z.object({ id: z.string().max(128) }))
   .handler(async ({ data }) =>
     asUser(({ user }) => getSentEmail(user.id, data.id)),
   )

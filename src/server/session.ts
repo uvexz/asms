@@ -1,6 +1,7 @@
 import { getRequestHeaders } from '@tanstack/react-start/server'
 
 import { getAuth } from '#/lib/auth'
+import { clientIpFromHeaders } from './ip'
 import { AppError, fail } from './result'
 import type { Result } from './result'
 
@@ -19,13 +20,23 @@ export type SessionContext = {
   }
 }
 
-export async function getSession() {
+/**
+ * `fresh` bypasses the signed session cookie cache and reads the session (and
+ * its user row) from the database. Use it for checks that must see a ban or a
+ * role change immediately, not on every ordinary read.
+ */
+export async function getSession(options?: { fresh?: boolean }) {
   const auth = await getAuth()
-  return auth.api.getSession({ headers: getRequestHeaders() })
+  return auth.api.getSession({
+    headers: getRequestHeaders(),
+    ...(options?.fresh ? { query: { disableCookieCache: true } } : {}),
+  })
 }
 
-export async function requireUser(): Promise<SessionContext> {
-  const session = await getSession()
+export async function requireUser(options?: {
+  fresh?: boolean
+}): Promise<SessionContext> {
+  const session = await getSession(options)
   if (!session) {
     throw new AppError('UNAUTHORIZED', '请先登录')
   }
@@ -66,13 +77,7 @@ export async function asAdmin<T>(
 }
 
 export function requestIp(): string | null {
-  const headers = getRequestHeaders()
-  return (
-    headers.get('cf-connecting-ip') ??
-    headers.get('x-real-ip') ??
-    headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-    null
-  )
+  return clientIpFromHeaders(getRequestHeaders())
 }
 
 export function requestUserAgent(): string | null {

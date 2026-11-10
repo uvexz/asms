@@ -42,6 +42,7 @@ export const REFRESH_INTERVAL = {
   overview: 15 * SECOND,
   mailboxes: 30 * SECOND,
   messages: 15 * SECOND,
+  sent: 30 * SECOND,
   adminOverview: 30 * SECOND,
 } as const
 
@@ -53,6 +54,8 @@ export const REFRESH_INTERVAL = {
  * `'sent-detail'`.
  */
 export const queryKeys = {
+  /** Client-only marker: which account currently owns the cache. */
+  authUser: ['auth', 'user'] as const,
   overview: ['mail', 'overview'] as const,
   mailboxes: ['mail', 'mailboxes'] as const,
   domains: ['mail', 'domains'] as const,
@@ -149,6 +152,9 @@ export function sentQuery(page: number) {
     queryKey: [...queryKeys.sent, page],
     queryFn: () => listSentFn({ data: { page, pageSize: 20 } }),
     staleTime: STALE_TIME.user,
+    // Delivery status only changes through Resend webhooks; without a poll
+    // the open list would never show a bounce or a delivery.
+    refetchInterval: REFRESH_INTERVAL.sent,
   })
 }
 
@@ -158,6 +164,7 @@ export function sentDetailQuery(id: string | null) {
     queryFn: () => getSentFn({ data: { id: id! } }),
     enabled: Boolean(id),
     staleTime: STALE_TIME.reference,
+    refetchInterval: id ? REFRESH_INTERVAL.sent : false,
   })
 }
 

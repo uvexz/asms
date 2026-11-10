@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from 'drizzle-orm'
+import { and, count, desc, eq, notInArray } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 
 import { db } from '#/db'
@@ -6,7 +6,7 @@ import { domains, sentEmails } from '#/db/schema'
 import { enqueueResend, getResend } from '../integrations/resend'
 import { AppError, assert } from '../result'
 import { getMailPolicy, getSetting } from '../settings'
-import { getMailboxForUser } from './mailboxes'
+import { getMailboxForUser, sanitizeDisplayName } from './mailboxes'
 import { releaseSendQuota, reserveSendQuota } from './quota'
 
 const MAX_RECIPIENTS = 10
@@ -47,7 +47,18 @@ export type SentEmailDto = {
   sentAt: string | null
 }
 
-function serializeSent(row: typeof sentEmails.$inferSelect): SentEmailDto {
+type SentEmailSummary = {
+  id: string
+  fromAddress: string
+  toJson: string
+  subject: string
+  status: string
+  errorMessage: string | null
+  createdAt: Date
+  sentAt: Date | null
+}
+
+function serializeSent(row: SentEmailSummary): SentEmailDto {
   let to: string[] = []
   try {
     const parsed = JSON.parse(row.toJson)
@@ -129,7 +140,15 @@ export async function sendMail(input: {
     .from(sentEmails)
     .where(eq(sentEmails.idempotencyKey, idempotencyKey))
     .get()
-  if (existing) return serializeSent(existing)
+  if (existing) {
+    if (existing.status === 'failed') {
+      throw new AppError(
+        'SEND_FAILED',
+        existing.errorMessage ?? '上次发送失败，请重试',
+      )
+    }
+    return serializeSent(existing)
+  }
 
   const [timeZone, fromName] = await Promise.all([
     getSetting('site.timezone'),
@@ -145,24 +164,50 @@ export async function sendMail(input: {
 
   const rowId = randomUUID()
   const now = new Date()
-  const displayName = mailbox.displayName || fromName
-  const fromAddress = `${displayName} <${dto.address}>`
+  const displayName =
+    sanitizeDisplayName(mailbox.displayName) || sanitizeDisplayName(fromName)
+  const fromAddress = displayName
+    ? `${displayName} <${dto.address}>`
+    : dto.address
 
-  await db.insert(sentEmails).values({
-    id: rowId,
-    userId: input.userId,
-    mailboxId: mailbox.id,
-    idempotencyKey,
-    fromAddress: dto.address,
-    toJson: JSON.stringify(to),
-    ccJson: JSON.stringify(cc),
-    bccJson: JSON.stringify(bcc),
-    subject,
-    textBody: text,
-    htmlBody: textToHtml(text),
-    status: 'queued',
-    createdAt: now,
-  })
+  let inserted: Array<{ id: string }>
+  try {
+    inserted = await db
+      .insert(sentEmails)
+      .values({
+        id: rowId,
+        userId: input.userId,
+        mailboxId: mailbox.id,
+        idempotencyKey,
+        fromAddress: dto.address,
+        toJson: JSON.stringify(to),
+        ccJson: JSON.stringify(cc),
+        bccJson: JSON.stringify(bcc),
+        subject,
+        textBody: text,
+        htmlBody: textToHtml(text),
+        status: 'queued',
+        createdAt: now,
+      })
+      .onConflictDoNothing()
+      .returning({ id: sentEmails.id })
+  } catch (error) {
+    await releaseSendQuota(input.userId, timeZone)
+    throw error
+  }
+
+  if (inserted.length === 0) {
+    // Another request with the same idempotency key won the insert. Give its
+    // quota reservation back and return the row it created.
+    await releaseSendQuota(input.userId, timeZone)
+    const winner = await db
+      .select()
+      .from(sentEmails)
+      .where(eq(sentEmails.idempotencyKey, idempotencyKey))
+      .get()
+    if (winner) return serializeSent(winner)
+    throw new AppError('SEND_FAILED', '发送请求冲突，请重试')
+  }
 
   try {
     const resend = await getResend()
@@ -203,23 +248,13 @@ export async function sendMail(input: {
 
     return serializeSent({
       id: rowId,
-      userId: input.userId,
-      mailboxId: mailbox.id,
-      resendEmailId: result.data.id,
-      idempotencyKey,
       fromAddress: dto.address,
       toJson: JSON.stringify(to),
-      ccJson: JSON.stringify(cc),
-      bccJson: JSON.stringify(bcc),
       subject,
-      textBody: text,
-      htmlBody: textToHtml(text),
       status: 'sent',
-      errorCode: null,
       errorMessage: null,
       createdAt: now,
       sentAt: new Date(),
-      lastEventAt: new Date(),
     })
   } catch (error) {
     await Promise.all([
@@ -250,7 +285,16 @@ export async function listSentEmails(input: {
 
   const [rows, totalRow] = await Promise.all([
     db
-      .select()
+      .select({
+        id: sentEmails.id,
+        fromAddress: sentEmails.fromAddress,
+        toJson: sentEmails.toJson,
+        subject: sentEmails.subject,
+        status: sentEmails.status,
+        errorMessage: sentEmails.errorMessage,
+        createdAt: sentEmails.createdAt,
+        sentAt: sentEmails.sentAt,
+      })
       .from(sentEmails)
       .where(where)
       .orderBy(desc(sentEmails.createdAt))
@@ -298,8 +342,26 @@ export async function updateSentStatusByResendId(
   resendEmailId: string,
   status: string,
 ) {
+  const conditions = [eq(sentEmails.resendEmailId, resendEmailId)]
+  // Webhooks can arrive out of order. Never move a delivered/bounced message
+  // back to `sent`, and never overwrite a hard failure with a soft event.
+  if (status === 'sent' || status === 'delivery_delayed') {
+    conditions.push(
+      notInArray(sentEmails.status, [
+        'delivered',
+        'bounced',
+        'complained',
+        'failed',
+      ]),
+    )
+  } else if (status === 'delivered') {
+    conditions.push(
+      notInArray(sentEmails.status, ['bounced', 'complained', 'failed']),
+    )
+  }
+
   await db
     .update(sentEmails)
     .set({ status, lastEventAt: new Date() })
-    .where(eq(sentEmails.resendEmailId, resendEmailId))
+    .where(and(...conditions))
 }

@@ -1,6 +1,9 @@
 import { AppError } from '../result'
 import { getSetting } from '../settings'
 import { enqueueResend, getResend } from '../integrations/resend'
+import { sanitizeDisplayName } from './mailboxes'
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export async function sendSystemMail(input: {
   to: string
@@ -18,14 +21,15 @@ export async function sendSystemMail(input: {
   if (!apiKey) {
     throw new AppError('RESEND_NOT_CONFIGURED', '尚未配置 Resend API Key')
   }
-  if (!fromAddress) {
-    throw new AppError('SYSTEM_SENDER_NOT_CONFIGURED', '尚未配置系统发件地址')
+  if (!fromAddress || !EMAIL_RE.test(fromAddress)) {
+    throw new AppError('SYSTEM_SENDER_NOT_CONFIGURED', '系统发件地址不合法')
   }
 
+  const displayName = sanitizeDisplayName(fromName)
   const resend = await getResend()
   const { error } = await enqueueResend(() =>
     resend.emails.send({
-      from: `${fromName} <${fromAddress}>`,
+      from: displayName ? `${displayName} <${fromAddress}>` : fromAddress,
       to: [input.to],
       subject: input.subject,
       text: input.text,

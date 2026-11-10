@@ -30,7 +30,6 @@ export type MessageSummary = {
 export type MessageDetailData = MessageSummary & {
   to: string[]
   cc: string[]
-  bcc: string[]
   textBody: string | null
   htmlBody: string | null
   attachments: Array<{

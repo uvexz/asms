@@ -96,23 +96,26 @@ Resend Dashboard → Webhooks → 添加：
 
 ## 环境变量
 
-| 变量                    | 必填     | 说明                                                        |
-| ----------------------- | -------- | ----------------------------------------------------------- |
-| `DATABASE_URL`          | 是       | 本地 `file:dev.db`；线上 `libsql://xxx.turso.io`            |
-| `DATABASE_AUTH_TOKEN`   | 线上必填 | Turso 数据库令牌                                            |
-| `BETTER_AUTH_URL`       | 是       | 站点完整 URL，如 `https://mail.example.com`                 |
-| `BETTER_AUTH_SECRET`    | 是       | Better Auth 会话签名密钥                                    |
-| `ASMS_ENCRYPTION_KEY`   | 是       | AES-256-GCM 密钥，用于加密数据库中的 API Key / OAuth Secret |
-| `SETUP_TOKEN`           | 建议     | 初始化管理员口令；公网部署强烈建议设置                      |
-| `CRON_SECRET`           | 建议     | `/api/cron/cleanup` 的 Bearer 口令                          |
-| `RESEND_API_KEY`        | 否       | 仅作兜底；面板配置优先                                      |
-| `RESEND_WEBHOOK_SECRET` | 否       | 仅作兜底；面板配置优先                                      |
-| `OIDC_ISSUER`           | 否       | sb.sb 登录的 issuer，如 `https://sb.sb/oidc`                |
-| `OIDC_CLIENT_ID`        | 否       | 配合 `OIDC_ISSUER` 使用；面板保存后以面板为准               |
-| `OIDC_CLIENT_SECRET`    | 否       | 同上                                                        |
-| `OIDC_REDIRECT_URI`     | 否       | 默认 `<BETTER_AUTH_URL>/api/auth/callback/sb`               |
-| `OIDC_SCOPES`           | 否       | 默认 `openid profile email offline_access`                  |
-| `PORT`                  | 否       | Node 服务端口，默认 3000                                    |
+| 变量                           | 必填     | 说明                                                                          |
+| ------------------------------ | -------- | ----------------------------------------------------------------------------- |
+| `DATABASE_URL`                 | 是       | 本地 `file:dev.db`；线上 `libsql://xxx.turso.io`                              |
+| `DATABASE_AUTH_TOKEN`          | 线上必填 | Turso 数据库令牌                                                              |
+| `BETTER_AUTH_URL`              | 是       | 站点完整 URL，如 `https://mail.example.com`                                   |
+| `BETTER_AUTH_SECRET`           | 是       | Better Auth 会话签名密钥                                                      |
+| `ASMS_ENCRYPTION_KEY`          | 是       | AES-256-GCM 密钥；生产环境缺失会拒绝启动                                      |
+| `ASMS_ENCRYPTION_KEY_PREVIOUS` | 否       | 轮换期间保留的旧密钥，逗号分隔，仅用于解密                                    |
+| `SETUP_TOKEN`                  | 生产必填 | 初始化管理员口令；生产环境未设置时无法领取管理员                              |
+| `CRON_SECRET`                  | 定时必填 | `/api/cron/cleanup` 的 Bearer 口令；未设置时接口一律拒绝                      |
+| `IP_ADDRESS_HEADERS`           | 否       | 可信客户端 IP 头，逗号分隔；默认 `cf-connecting-ip,x-real-ip,x-forwarded-for` |
+| `TRUSTED_PROXIES`              | 否       | 可信代理 CIDR，逗号分隔，用于解析多级 `x-forwarded-for`                       |
+| `RESEND_API_KEY`               | 否       | 仅作兜底；面板配置优先                                                        |
+| `RESEND_WEBHOOK_SECRET`        | 否       | 仅作兜底；面板配置优先                                                        |
+| `OIDC_ISSUER`                  | 否       | sb.sb 登录的 issuer，如 `https://sb.sb/oidc`                                  |
+| `OIDC_CLIENT_ID`               | 否       | 配合 `OIDC_ISSUER` 使用；面板保存后以面板为准                                 |
+| `OIDC_CLIENT_SECRET`           | 否       | 同上                                                                          |
+| `OIDC_REDIRECT_URI`            | 否       | 默认 `<BETTER_AUTH_URL>/api/auth/callback/sb`                                 |
+| `OIDC_SCOPES`                  | 否       | 默认 `openid profile email offline_access`                                    |
+| `PORT`                         | 否       | Node 服务端口，默认 3000                                                      |
 
 `OIDC_*` 只在面板里还没有保存过 sb.sb 时生效：保存（或关闭）后完全以数据库为准。回调地址需在 sb.sb 登记为 `<BETTER_AUTH_URL>/api/auth/callback/sb`；scope 必须包含 `email`，否则第三方账号不会返回登录邮箱。
 
@@ -141,12 +144,13 @@ turso db tokens create asms
 `GET|POST /api/cron/cleanup` 会执行：
 
 - 删除过期的临时邮箱及其邮件、附件；
-- 删除超过保留期的邮件；
+- 删除超过保留期的收件与已发送记录；
 - 清理到期的地址冷却记录；
 - 清理 30 天前的收件日志、180 天前的审计日志；
-- 删除对应的 S3 对象。
+- 清理过期的会话与验证记录；
+- 删除对应的 S3 对象（批量删除，失败时保留数据库行以便下次重试）。
 
-鉴权：`Authorization: Bearer $CRON_SECRET`（未设置 `CRON_SECRET` 时仅非生产环境可用）。
+鉴权：仅接受 `Authorization: Bearer $CRON_SECRET`；未设置 `CRON_SECRET` 时接口一律拒绝。
 
 - **Vercel**：`vercel.json` 已配置每天 03:00 调用；Vercel 会自动带上 `CRON_SECRET`。
 - **VPS / Docker**：用系统 cron 或容器编排的定时任务调用，例如：

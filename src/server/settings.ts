@@ -217,17 +217,31 @@ type SettingRow = typeof settings.$inferSelect
 
 let cache: { rows: Map<string, SettingRow>; expiresAt: number } | null = null
 let inflight: Promise<Map<string, SettingRow>> | null = null
+let generation = 0
 
 const CACHE_TTL_MS = 15_000
+const warnedSettingErrors = new Set<string>()
+
+/** A corrupt security gate must not fall back to a permissive default. */
+const FAIL_CLOSED: Partial<Record<SettingKey, unknown>> = {
+  'site.registrationEnabled': false,
+  'mail.allowTempSending': false,
+  'auth.emailPasswordEnabled': false,
+}
 
 async function loadRows(): Promise<Map<string, SettingRow>> {
   if (cache && cache.expiresAt > Date.now()) return cache.rows
   if (inflight) return inflight
 
+  const startGeneration = generation
   inflight = (async () => {
     const rows = await db.select().from(settings)
     const map = new Map(rows.map((row) => [row.key, row]))
-    cache = { rows: map, expiresAt: Date.now() + CACHE_TTL_MS }
+    // A write may have invalidated the cache while this read was in flight;
+    // do not repopulate it with rows that predate the invalidation.
+    if (startGeneration === generation) {
+      cache = { rows: map, expiresAt: Date.now() + CACHE_TTL_MS }
+    }
     return map
   })().finally(() => {
     inflight = null
@@ -237,7 +251,10 @@ async function loadRows(): Promise<Map<string, SettingRow>> {
 }
 
 export function invalidateSettings() {
+  generation += 1
   cache = null
+  mailPolicyCache = null
+  siteConfigCache = null
 }
 
 export async function getSetting<TKey extends SettingKey>(
@@ -247,22 +264,34 @@ export async function getSetting<TKey extends SettingKey>(
   const row = (await loadRows()).get(key)
 
   let raw: unknown
+  let corrupt = false
   if (row) {
     try {
       const text = row.isSecret ? decryptSecret(row.value) : row.value
       raw = text ? JSON.parse(text) : undefined
-    } catch {
+    } catch (error) {
+      corrupt = true
+      if (!warnedSettingErrors.has(key)) {
+        warnedSettingErrors.add(key)
+        console.error(`[asms] failed to read setting ${key}`, error)
+      }
       raw = undefined
     }
   }
 
+  if (corrupt && key in FAIL_CLOSED) {
+    return def.schema.parse(FAIL_CLOSED[key]) as SettingValue<TKey>
+  }
   return def.schema.parse(raw) as SettingValue<TKey>
 }
+
+type SettingsWriter = Pick<typeof db, 'insert'>
 
 export async function setSetting<TKey extends SettingKey>(
   key: TKey,
   value: unknown,
   actorId?: string,
+  writer: SettingsWriter = db,
 ): Promise<SettingValue<TKey>> {
   const def = SETTING_DEFS[key]
   const parsed = def.schema.parse(value)
@@ -271,7 +300,7 @@ export async function setSetting<TKey extends SettingKey>(
     'secret' in def && def.secret ? encryptSecret(serialized) : serialized
   const isSecret = 'secret' in def && Boolean(def.secret)
 
-  await db
+  await writer
     .insert(settings)
     .values({
       key,
@@ -333,8 +362,16 @@ export async function getAdminSettings(): Promise<AdminSettingRow[]> {
         } else {
           preview = String(value ?? '')
         }
-      } catch {
+      } catch (error) {
         hasValue = false
+        value = def.schema.parse(
+          key in FAIL_CLOSED ? FAIL_CLOSED[key] : undefined,
+        )
+        if (!isSecret) preview = String(value ?? '')
+        if (!warnedSettingErrors.has(key)) {
+          warnedSettingErrors.add(key)
+          console.error(`[asms] failed to read setting ${key}`, error)
+        }
       }
     }
 
@@ -350,7 +387,7 @@ export async function getAdminSettings(): Promise<AdminSettingRow[]> {
   })
 }
 
-export async function getMailPolicy() {
+async function buildMailPolicy() {
   const [
     maxPermanentMailboxes,
     dailySendLimit,
@@ -392,7 +429,19 @@ export async function getMailPolicy() {
   }
 }
 
-export async function getSiteConfig() {
+type MailPolicy = Awaited<ReturnType<typeof buildMailPolicy>>
+let mailPolicyCache: { value: MailPolicy; expiresAt: number } | null = null
+
+export async function getMailPolicy(): Promise<MailPolicy> {
+  if (mailPolicyCache && mailPolicyCache.expiresAt > Date.now()) {
+    return mailPolicyCache.value
+  }
+  const value = await buildMailPolicy()
+  mailPolicyCache = { value, expiresAt: Date.now() + CACHE_TTL_MS }
+  return value
+}
+
+async function buildSiteConfig() {
   const [
     siteName,
     siteDescription,
@@ -420,4 +469,16 @@ export async function getSiteConfig() {
     registrationEnabled,
     emailPasswordEnabled,
   }
+}
+
+type SiteConfig = Awaited<ReturnType<typeof buildSiteConfig>>
+let siteConfigCache: { value: SiteConfig; expiresAt: number } | null = null
+
+export async function getSiteConfig(): Promise<SiteConfig> {
+  if (siteConfigCache && siteConfigCache.expiresAt > Date.now()) {
+    return siteConfigCache.value
+  }
+  const value = await buildSiteConfig()
+  siteConfigCache = { value, expiresAt: Date.now() + CACHE_TTL_MS }
+  return value
 }

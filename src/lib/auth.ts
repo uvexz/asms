@@ -18,6 +18,8 @@ import {
   parseScopes,
 } from '#/lib/oauth-providers'
 import { decryptSecret } from '#/server/crypto'
+import { assertRuntimeEnv } from '#/server/env'
+import { configuredIpHeaders, configuredTrustedProxies } from '#/server/ip'
 import { sendSystemMail } from '#/server/services/system-mail'
 import { getSetting } from '#/server/settings'
 
@@ -36,12 +38,23 @@ type Providers = {
   ids: string[]
 }
 
+const warnedSecrets = new Set<string>()
+
 function secretOf(row: ProviderRow | undefined): string | null {
   if (!row?.clientSecretEnc) return null
   try {
     return decryptSecret(row.clientSecretEnc)
-  } catch {
-    // A rotated encryption key should not take the whole auth endpoint down.
+  } catch (error) {
+    // A rotated encryption key should not take the whole auth endpoint down,
+    // but silently dropping the provider makes the login screen lie about
+    // which methods are usable. Log it once per provider instead.
+    if (!warnedSecrets.has(row.provider)) {
+      warnedSecrets.add(row.provider)
+      console.error(
+        `[asms] failed to decrypt OAuth client secret for ${row.provider}`,
+        error,
+      )
+    }
     return null
   }
 }
@@ -67,12 +80,16 @@ function fromRow(
   provider: string,
   row: ProviderRow,
 ): GenericOAuthConfig | null {
-  if (!row.enabled || !row.clientId || !row.issuer) return null
+  const clientSecret = secretOf(row)
+  // A provider without a decryptable secret cannot complete the token
+  // exchange. Treating it as configured both shows a broken login button and
+  // lets an admin disable password login while no provider actually works.
+  if (!row.enabled || !row.clientId || !row.issuer || !clientSecret) return null
   const scopes = parseScopes(row.scopes)
   return {
     providerId: provider,
     clientId: row.clientId,
-    clientSecret: secretOf(row) ?? undefined,
+    clientSecret,
     discoveryUrl: discoveryUrl(row.issuer),
     scopes: scopes.length > 0 ? scopes : defaultScopes(provider),
     pkce: true,
@@ -146,6 +163,8 @@ function createAuth(
   appName: string,
 ) {
   const baseURL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3000'
+  const ipAddressHeaders = configuredIpHeaders()
+  const trustedProxies = configuredTrustedProxies()
 
   return betterAuth({
     appName,
@@ -156,20 +175,38 @@ function createAuth(
       schema,
     }),
     trustedOrigins: [baseURL],
+    advanced: {
+      ipAddress: {
+        ipAddressHeaders,
+        ...(trustedProxies.length > 0 ? { trustedProxies } : {}),
+      },
+    },
     session: {
       expiresIn: 60 * 60 * 24 * 30,
       updateAge: 60 * 60 * 24,
-      // Read as "the session is fresh for its whole life". Sessions last a
-      // month here, so the 24-hour default only made unlinking a third-party
-      // account fail on every already-signed-in browser.
-      freshAge: 0,
+      // Sensitive operations (unlink account, delete account) require a session
+      // created within a day. Treating a month-old session as fresh removed
+      // that re-authentication step entirely.
+      freshAge: 60 * 60 * 24,
+      // Every server function resolves the session; without this each
+      // navigation and query reads the session table again. The short lease
+      // also bounds how long a banned or demoted user stays stale.
+      cookieCache: { enabled: true, maxAge: 30 },
+    },
+    rateLimit: {
+      enabled: true,
+      window: 10,
+      max: 100,
     },
     account: {
       accountLinking: {
         enabled: true,
-        // Local accounts never verify their email address, so requiring that
-        // would block every existing user from adopting a third-party login.
-        requireLocalEmailVerified: false,
+        // Implicit linking is the account pre-hijacking path: someone who
+        // registers a victim's unverified address would receive the victim's
+        // first OAuth sign-in. Linking stays available as an explicit action
+        // in settings, where the signed-in user proves ownership.
+        disableImplicitLinking: true,
+        requireLocalEmailVerified: true,
         // A linked account is chosen deliberately by a signed-in user; its
         // address does not have to match the login address.
         allowDifferentEmails: true,
@@ -248,6 +285,7 @@ async function loadProviders(): Promise<Providers> {
  * rebuilt whenever that configuration changes (checked per request, cached).
  */
 export async function getAuth(): Promise<AuthInstance> {
+  assertRuntimeEnv()
   const [providers, enabled, appName] = await Promise.all([
     loadProviders(),
     getSetting('auth.emailPasswordEnabled'),

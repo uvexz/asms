@@ -1,15 +1,22 @@
-import { count, eq } from 'drizzle-orm'
+import { count, eq, sql } from 'drizzle-orm'
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import { db } from '#/db'
 import { user } from '#/db/schema'
 import { getEnabledProviderIds, resetAuthCache } from '#/lib/auth'
-import { AppError, assert, run } from '../result'
+import { assert, run } from '../result'
 import { getSession, requireUser } from '../session'
 import { publicDomainNames } from '../services/domains'
 import { getSiteConfig } from '../settings'
 import { audit } from '../services/audit'
+
+function tokenMatches(input: string, expected: string): boolean {
+  const a = createHash('sha256').update(input).digest()
+  const b = createHash('sha256').update(expected).digest()
+  return timingSafeEqual(a, b)
+}
 
 /**
  * Everything the shell needs for a render: who is signed in, and how the site
@@ -87,32 +94,36 @@ export const fetchSetupStatus = createServerFn({ method: 'GET' }).handler(
 )
 
 export const claimAdmin = createServerFn({ method: 'POST' })
-  .validator(z.object({ token: z.string().optional() }))
+  .validator(z.object({ token: z.string().max(200).optional() }))
   .handler(async ({ data }) =>
     run(async () => {
       const session = await requireUser()
-      const admins =
-        (
-          await db
-            .select({ value: count() })
-            .from(user)
-            .where(eq(user.role, 'admin'))
-            .get()
-        )?.value ?? 0
-
-      assert(admins === 0, 'SETUP_CLOSED', '管理员已存在')
 
       const expected = process.env.SETUP_TOKEN
+      assert(
+        expected || process.env.NODE_ENV !== 'production',
+        'SETUP_TOKEN_REQUIRED',
+        '生产环境必须配置 SETUP_TOKEN 才能初始化管理员',
+      )
       if (expected) {
-        if (!data.token || data.token !== expected) {
-          throw new AppError('SETUP_TOKEN_INVALID', '初始化口令不正确')
-        }
+        assert(
+          data.token && tokenMatches(data.token, expected),
+          'SETUP_TOKEN_INVALID',
+          '初始化口令不正确',
+        )
       }
 
-      await db
+      // One statement makes "no admin yet" and the promotion atomic; two
+      // simultaneous claims can no longer both win the race.
+      const promoted = await db
         .update(user)
         .set({ role: 'admin', updatedAt: new Date() })
-        .where(eq(user.id, session.user.id))
+        .where(
+          sql`${user.id} = ${session.user.id} and (select count(*) from "user" where "role" = 'admin') = 0`,
+        )
+        .returning({ id: user.id })
+
+      assert(promoted.length > 0, 'SETUP_CLOSED', '管理员已存在')
 
       await audit({
         actorId: session.user.id,

@@ -1,4 +1,4 @@
-import { and, eq, inArray, lt, lte } from 'drizzle-orm'
+import { and, eq, inArray, lt, lte, ne, or } from 'drizzle-orm'
 
 import { db } from '#/db'
 import {
@@ -8,20 +8,24 @@ import {
   ingestEvents,
   mailboxes,
   messages,
+  sentEmails,
+  session,
+  verification,
 } from '#/db/schema'
 import {
-  deleteObject,
+  deleteObjectsStrict,
   getS3Config,
   isS3Configured,
 } from '../integrations/storage'
 import { getSetting } from '../settings'
 
-const MESSAGE_BATCH = 500
+const MESSAGE_BATCH = 1000
 const MAILBOX_BATCH = 200
-const MAX_ROUNDS = 8
+const CLEANUP_BUDGET_MS = 8_000
 
 export async function runCleanup() {
   const now = new Date()
+  const deadline = Date.now() + CLEANUP_BUDGET_MS
   const retentionDays = await getSetting('mail.retentionDays')
   const messageCutoff = new Date(now.getTime() - retentionDays * 86_400_000)
   const keys = new Set<string>()
@@ -30,11 +34,16 @@ export async function runCleanup() {
   const canStore = isS3Configured(s3)
 
   let deletedMessages = 0
-  for (let round = 0; round < MAX_ROUNDS; round += 1) {
+  let deletedMailboxes = 0
+  let storageHealthy = true
+  let truncated = false
+
+  while (Date.now() < deadline) {
     const batch = await db
       .select({ id: messages.id })
       .from(messages)
       .where(lt(messages.receivedAt, messageCutoff))
+      .orderBy(messages.receivedAt)
       .limit(MESSAGE_BATCH)
 
     if (batch.length === 0) break
@@ -44,20 +53,33 @@ export async function runCleanup() {
       .select({ storageKey: attachments.storageKey })
       .from(attachments)
       .where(inArray(attachments.messageId, ids))
-    for (const file of files) {
-      if (file.storageKey) keys.add(file.storageKey)
+    const batchKeys = files
+      .map((file) => file.storageKey)
+      .filter((key): key is string => Boolean(key))
+
+    if (canStore && batchKeys.length > 0) {
+      try {
+        await deleteObjectsStrict(batchKeys)
+      } catch (error) {
+        // Keep the rows: the next run can retry instead of leaking objects
+        // that no longer have a database reference.
+        console.error('[asms] cleanup storage delete failed', error)
+        storageHealthy = false
+        break
+      }
     }
 
     const removed = await db
       .delete(messages)
       .where(inArray(messages.id, ids))
       .returning({ id: messages.id })
+    for (const key of batchKeys) keys.add(key)
     deletedMessages += removed.length
     if (removed.length < MESSAGE_BATCH) break
   }
+  if (Date.now() >= deadline) truncated = true
 
-  let deletedMailboxes = 0
-  for (let round = 0; round < MAX_ROUNDS; round += 1) {
+  while (storageHealthy && Date.now() < deadline) {
     const expired = await db
       .select({ id: mailboxes.id })
       .from(mailboxes)
@@ -74,17 +96,29 @@ export async function runCleanup() {
       .from(attachments)
       .innerJoin(messages, eq(attachments.messageId, messages.id))
       .where(inArray(messages.mailboxId, ids))
-    for (const file of files) {
-      if (file.storageKey) keys.add(file.storageKey)
+    const batchKeys = files
+      .map((file) => file.storageKey)
+      .filter((key): key is string => Boolean(key))
+
+    if (canStore && batchKeys.length > 0) {
+      try {
+        await deleteObjectsStrict(batchKeys)
+      } catch (error) {
+        console.error('[asms] cleanup storage delete failed', error)
+        storageHealthy = false
+        break
+      }
     }
 
     const removed = await db
       .delete(mailboxes)
       .where(inArray(mailboxes.id, ids))
       .returning({ id: mailboxes.id })
+    for (const key of batchKeys) keys.add(key)
     deletedMailboxes += removed.length
     if (removed.length < MAILBOX_BATCH) break
   }
+  if (Date.now() >= deadline) truncated = true
 
   const releases = await db
     .delete(addressReleases)
@@ -103,15 +137,31 @@ export async function runCleanup() {
     .where(lt(auditLogs.createdAt, staleAudit))
     .returning({ id: auditLogs.id })
 
-  if (canStore && keys.size > 0) {
-    for (const key of keys) {
-      try {
-        await deleteObject(key)
-      } catch (error) {
-        console.error('[asms] delete object failed', key, error)
-      }
-    }
-  }
+  // Sent records carry the full body too; the retention window applies to
+  // them as well. `queued` rows stay until a webhook or a retry resolves them.
+  const staleQueued = new Date(now.getTime() - 7 * 86_400_000)
+  const sent = await db
+    .delete(sentEmails)
+    .where(
+      and(
+        lt(sentEmails.createdAt, messageCutoff),
+        or(
+          ne(sentEmails.status, 'queued'),
+          lt(sentEmails.createdAt, staleQueued),
+        ),
+      ),
+    )
+    .returning({ id: sentEmails.id })
+
+  const sessions = await db
+    .delete(session)
+    .where(lt(session.expiresAt, now))
+    .returning({ id: session.id })
+
+  const verifications = await db
+    .delete(verification)
+    .where(lt(verification.expiresAt, now))
+    .returning({ id: verification.id })
 
   return {
     messages: deletedMessages,
@@ -119,7 +169,11 @@ export async function runCleanup() {
     releases: releases.length,
     ingestEvents: ingest.length,
     auditLogs: audits.length,
+    sentEmails: sent.length,
+    sessions: sessions.length,
+    verifications: verifications.length,
     objects: canStore ? keys.size : 0,
+    truncated,
     ranAt: new Date().toISOString(),
   }
 }

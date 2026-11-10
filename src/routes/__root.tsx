@@ -10,6 +10,7 @@ import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 import { SpaLinkHandler } from '@/components/app/spa-link-handler'
 import { ThemeColor } from '@/components/app/theme-color'
 import { Toaster } from '@/components/base/toast/toast'
+import { queryKeys } from '@/lib/queries'
 import { siteBranding, siteIcons, siteTitle } from '@/lib/site'
 import { fetchShell } from '@/server/functions/auth'
 
@@ -23,8 +24,19 @@ export interface RouterContext {
 }
 
 export const Route = createRootRouteWithContext<RouterContext>()({
-  beforeLoad: async () => {
+  beforeLoad: async ({ context }) => {
     const shell = await fetchShell()
+    const userId = shell.session?.user.id ?? null
+    const previousOwner = context.queryClient.getQueryData<{
+      id: string | null
+    }>(queryKeys.authUser)
+    // A session can expire and another account can sign in without a
+    // sign-out. Drop the previous account's mail/admin cache before the new
+    // owner's routes render.
+    if (previousOwner?.id !== userId) {
+      context.queryClient.clear()
+      context.queryClient.setQueryData(queryKeys.authUser, { id: userId })
+    }
     return { session: shell.session, site: shell.site }
   },
   head: ({ matches }) => {

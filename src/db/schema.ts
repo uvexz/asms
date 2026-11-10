@@ -79,7 +79,10 @@ export const account = sqliteTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index('account_user_idx').on(t.userId)],
+  (t) => [
+    index('account_user_idx').on(t.userId),
+    index('account_provider_idx').on(t.providerId, t.accountId),
+  ],
 )
 
 export const verification = sqliteTable(
@@ -160,6 +163,7 @@ export const mailboxes = sqliteTable(
   (t) => [
     uniqueIndex('mailboxes_address_uq').on(t.domainId, t.localPart),
     index('mailboxes_user_kind_idx').on(t.userId, t.kind),
+    index('mailboxes_user_created_idx').on(t.userId, t.createdAt),
     index('mailboxes_expiry_idx').on(t.kind, t.expiresAt),
   ],
 )
@@ -218,6 +222,10 @@ export const messages = sqliteTable(
   (t) => [
     uniqueIndex('messages_resend_mailbox_uq').on(t.resendEmailId, t.mailboxId),
     index('messages_mailbox_time_idx').on(t.mailboxId, t.receivedAt),
+    index('messages_received_idx').on(t.receivedAt),
+    index('messages_unread_idx')
+      .on(t.mailboxId)
+      .where(sql`${t.isRead} = 0`),
   ],
 )
 
@@ -271,7 +279,11 @@ export const sentEmails = sqliteTable(
     sentAt: integer('sent_at', { mode: 'timestamp' }),
     lastEventAt: integer('last_event_at', { mode: 'timestamp' }),
   },
-  (t) => [index('sent_user_time_idx').on(t.userId, t.createdAt)],
+  (t) => [
+    index('sent_user_time_idx').on(t.userId, t.createdAt),
+    index('sent_resend_idx').on(t.resendEmailId),
+    index('sent_created_idx').on(t.createdAt),
+  ],
 )
 
 export const sendQuota = sqliteTable(

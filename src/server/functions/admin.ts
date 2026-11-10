@@ -4,13 +4,13 @@ import { z } from 'zod'
 
 import { db } from '#/db'
 import {
-  addressReleases,
   auditLogs,
   domains,
   ingestEvents,
   mailboxes,
   messages,
   oauthProviders,
+  session,
   user,
 } from '#/db/schema'
 import { getEnabledProviderIds, resetAuthCache } from '#/lib/auth'
@@ -34,50 +34,78 @@ import {
   verifyDomain,
 } from '../services/domains'
 import { audit } from '../services/audit'
-import { deleteMailboxStorage } from '../services/mailboxes'
+import { deleteMailboxAsAdmin } from '../services/mailboxes'
 import { getResend, resetResendClient } from '../integrations/resend'
 import { resetS3Client } from '../integrations/storage'
 import {
   getAdminSettings,
-  getMailPolicy,
+  getSetting,
   invalidateSettings,
   SETTING_DEFS,
   setSetting,
 } from '../settings'
 import type { SettingKey } from '../settings'
 
+type AdminCounts = {
+  users: number
+  permanent: number
+  temporary: number
+  messages: number
+}
+
+let adminCountsCache: { value: AdminCounts; expiresAt: number } | null = null
+
+function invalidateAdminCounts() {
+  adminCountsCache = null
+}
+
+async function getAdminCounts(): Promise<AdminCounts> {
+  if (adminCountsCache && adminCountsCache.expiresAt > Date.now()) {
+    return adminCountsCache.value
+  }
+
+  const [users, permanent, temporary, inbox] = await Promise.all([
+    db.select({ value: count() }).from(user).get(),
+    db
+      .select({ value: count() })
+      .from(mailboxes)
+      .where(eq(mailboxes.kind, 'permanent'))
+      .get(),
+    db
+      .select({ value: count() })
+      .from(mailboxes)
+      .where(eq(mailboxes.kind, 'temporary'))
+      .get(),
+    db.select({ value: count() }).from(messages).get(),
+  ])
+
+  const value = {
+    users: users?.value ?? 0,
+    permanent: permanent?.value ?? 0,
+    temporary: temporary?.value ?? 0,
+    messages: inbox?.value ?? 0,
+  }
+  adminCountsCache = { value, expiresAt: Date.now() + 30_000 }
+  return value
+}
+
 export const adminOverviewFn = createServerFn({ method: 'GET' }).handler(
   async () =>
     asAdmin(async () => {
-      const [users, permanent, temporary, inbox, domainRows] =
-        await Promise.all([
-          db.select({ value: count() }).from(user).get(),
-          db
-            .select({ value: count() })
-            .from(mailboxes)
-            .where(eq(mailboxes.kind, 'permanent'))
-            .get(),
-          db
-            .select({ value: count() })
-            .from(mailboxes)
-            .where(eq(mailboxes.kind, 'temporary'))
-            .get(),
-          db.select({ value: count() }).from(messages).get(),
-          db.select().from(domains).orderBy(desc(domains.createdAt)),
-        ])
+      const [counts, domainRows] = await Promise.all([
+        getAdminCounts(),
+        db
+          .select({
+            id: domains.id,
+            name: domains.name,
+            status: domains.status,
+            isDefault: domains.isDefault,
+          })
+          .from(domains)
+          .orderBy(desc(domains.createdAt)),
+      ])
 
-      return {
-        users: users?.value ?? 0,
-        permanent: permanent?.value ?? 0,
-        temporary: temporary?.value ?? 0,
-        messages: inbox?.value ?? 0,
-        domains: domainRows.map((row) => ({
-          id: row.id,
-          name: row.name,
-          status: row.status,
-          isDefault: row.isDefault,
-        })),
-      }
+      return { ...counts, domains: domainRows }
     }),
 )
 
@@ -96,7 +124,7 @@ export const adminSaveSettingsFn = createServerFn({ method: 'POST' })
   .validator(
     z.object({
       entries: z
-        .array(z.object({ key: z.string(), value: z.unknown() }))
+        .array(z.object({ key: z.string().max(100), value: z.unknown() }))
         .min(1)
         .max(50),
     }),
@@ -118,11 +146,13 @@ export const adminSaveSettingsFn = createServerFn({ method: 'POST' })
       }
 
       const changed: string[] = []
-      for (const entry of data.entries) {
-        if (!(entry.key in SETTING_DEFS)) continue
-        await setSetting(entry.key as SettingKey, entry.value, actor.id)
-        changed.push(entry.key)
-      }
+      await db.transaction(async (tx) => {
+        for (const entry of data.entries) {
+          if (!(entry.key in SETTING_DEFS)) continue
+          await setSetting(entry.key as SettingKey, entry.value, actor.id, tx)
+          changed.push(entry.key)
+        }
+      })
 
       invalidateSettings()
       resetResendClient()
@@ -161,8 +191,8 @@ export const adminTestResendFn = createServerFn({ method: 'POST' }).handler(
 export const adminUsersFn = createServerFn({ method: 'GET' })
   .validator(
     z.object({
-      search: z.string().optional(),
-      page: z.number().int().min(1).optional(),
+      search: z.string().max(100).optional(),
+      page: z.number().int().min(1).max(1000).optional(),
     }),
   )
   .handler(async ({ data }) =>
@@ -219,7 +249,12 @@ export const adminUsersFn = createServerFn({ method: 'GET' })
   )
 
 export const adminSetRoleFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ userId: z.string(), role: z.enum(['user', 'admin']) }))
+  .validator(
+    z.object({
+      userId: z.string().max(128),
+      role: z.enum(['user', 'admin']),
+    }),
+  )
   .handler(async ({ data }) =>
     asAdmin(async ({ user: actor }) => {
       if (data.userId === actor.id && data.role !== 'admin') {
@@ -258,7 +293,7 @@ export const adminSetRoleFn = createServerFn({ method: 'POST' })
 export const adminBanUserFn = createServerFn({ method: 'POST' })
   .validator(
     z.object({
-      userId: z.string(),
+      userId: z.string().max(128),
       banned: z.boolean(),
       reason: z.string().max(200).optional(),
     }),
@@ -273,9 +308,19 @@ export const adminBanUserFn = createServerFn({ method: 'POST' })
         .set({
           banned: data.banned,
           banReason: data.banned ? (data.reason ?? '违反使用条款') : null,
+          // A stale expiry from an earlier ban must not auto-unban the user on
+          // their next session.
+          banExpires: null,
           updatedAt: new Date(),
         })
         .where(eq(user.id, data.userId))
+
+      if (data.banned) {
+        // The custom server functions check `user.banned`, but existing
+        // sessions also reach Better Auth endpoints and the attachment route.
+        // Revoke them at the source, exactly like the admin plugin's banUser.
+        await db.delete(session).where(eq(session.userId, data.userId))
+      }
 
       await audit({
         actorId: actor.id,
@@ -292,9 +337,9 @@ export const adminBanUserFn = createServerFn({ method: 'POST' })
 export const adminMailboxesFn = createServerFn({ method: 'GET' })
   .validator(
     z.object({
-      search: z.string().optional(),
+      search: z.string().max(100).optional(),
       kind: z.enum(['permanent', 'temporary']).optional(),
-      page: z.number().int().min(1).optional(),
+      page: z.number().int().min(1).max(1000).optional(),
     }),
   )
   .handler(async ({ data }) =>
@@ -365,7 +410,7 @@ export const adminAddDomainFn = createServerFn({ method: 'POST' })
   )
 
 export const adminVerifyDomainFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ id: z.string() }))
+  .validator(z.object({ id: z.string().max(128) }))
   .handler(async ({ data }) =>
     asAdmin(async ({ user: actor }) => {
       const result = await verifyDomain(data.id)
@@ -381,11 +426,11 @@ export const adminVerifyDomainFn = createServerFn({ method: 'POST' })
   )
 
 export const adminRefreshDomainFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ id: z.string() }))
+  .validator(z.object({ id: z.string().max(128) }))
   .handler(async ({ data }) => asAdmin(async () => refreshDomain(data.id)))
 
 export const adminSetDefaultDomainFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ id: z.string() }))
+  .validator(z.object({ id: z.string().max(128) }))
   .handler(async ({ data }) =>
     asAdmin(async ({ user: actor }) => {
       await setDefaultDomain(data.id)
@@ -402,7 +447,7 @@ export const adminSetDefaultDomainFn = createServerFn({ method: 'POST' })
 export const adminUpdateDomainFn = createServerFn({ method: 'POST' })
   .validator(
     z.object({
-      id: z.string(),
+      id: z.string().max(128),
       sendingEnabled: z.boolean().optional(),
       receivingEnabled: z.boolean().optional(),
       temporaryEnabled: z.boolean().optional(),
@@ -424,7 +469,7 @@ export const adminUpdateDomainFn = createServerFn({ method: 'POST' })
   )
 
 export const adminRemoveDomainFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ id: z.string() }))
+  .validator(z.object({ id: z.string().max(128) }))
   .handler(async ({ data }) =>
     asAdmin(async ({ user: actor }) => {
       await removeDomain(data.id)
@@ -439,38 +484,11 @@ export const adminRemoveDomainFn = createServerFn({ method: 'POST' })
   )
 
 export const adminDeleteMailboxFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ id: z.string() }))
+  .validator(z.object({ id: z.string().max(128) }))
   .handler(async ({ data }) =>
     asAdmin(async ({ user: actor }) => {
-      const row = await db
-        .select()
-        .from(mailboxes)
-        .where(eq(mailboxes.id, data.id))
-        .get()
-      assert(row, 'MAILBOX_NOT_FOUND', '邮箱不存在')
-
-      const policy = await getMailPolicy()
-      if (row.kind === 'permanent' && policy.permanentCooldownDays > 0) {
-        const now = Date.now()
-        const availableAt = new Date(
-          now + policy.permanentCooldownDays * 86_400_000,
-        )
-        await db
-          .insert(addressReleases)
-          .values({
-            domainId: row.domainId,
-            localPart: row.localPart,
-            releasedAt: new Date(now),
-            availableAt,
-          })
-          .onConflictDoUpdate({
-            target: [addressReleases.domainId, addressReleases.localPart],
-            set: { releasedAt: new Date(now), availableAt },
-          })
-      }
-
-      await deleteMailboxStorage(data.id)
-      await db.delete(mailboxes).where(eq(mailboxes.id, data.id))
+      const row = await deleteMailboxAsAdmin(data.id)
+      invalidateAdminCounts()
       await audit({
         actorId: actor.id,
         action: 'mailbox.delete',
@@ -551,6 +569,20 @@ export const adminSaveOAuthFn = createServerFn({ method: 'POST' })
       if (data.enabled && !data.clientId.trim()) {
         throw new AppError('OAUTH_CLIENT_ID_REQUIRED', '启用前请填写 Client ID')
       }
+      if (!data.enabled) {
+        const passwordEnabled = await getSetting('auth.emailPasswordEnabled')
+        const usable = await getEnabledProviderIds()
+        if (
+          !passwordEnabled &&
+          usable.includes(data.provider) &&
+          usable.length === 1
+        ) {
+          throw new AppError(
+            'LAST_LOGIN_METHOD',
+            '这是最后一个可用的登录方式，请先启用其他方式',
+          )
+        }
+      }
       if (oidc && data.enabled) {
         assert(issuer, 'OIDC_ISSUER_REQUIRED', '启用前请填写 Issuer')
         const url = parseUrl(issuer)
@@ -605,7 +637,7 @@ export const adminSaveOAuthFn = createServerFn({ method: 'POST' })
   )
 
 export const adminAuditFn = createServerFn({ method: 'GET' })
-  .validator(z.object({ page: z.number().int().min(1).optional() }))
+  .validator(z.object({ page: z.number().int().min(1).max(1000).optional() }))
   .handler(async ({ data }) =>
     asAdmin(async () => {
       const page = Math.max(1, data.page ?? 1)
@@ -642,7 +674,7 @@ export const adminAuditFn = createServerFn({ method: 'GET' })
   )
 
 export const adminIngestFn = createServerFn({ method: 'GET' })
-  .validator(z.object({ page: z.number().int().min(1).optional() }))
+  .validator(z.object({ page: z.number().int().min(1).max(1000).optional() }))
   .handler(async ({ data }) =>
     asAdmin(async () => {
       const page = Math.max(1, data.page ?? 1)
@@ -687,7 +719,13 @@ function envSecret(provider: string): string | null {
 function parseUrl(value: string): URL | null {
   try {
     const url = new URL(value)
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url : null
+    if (url.protocol === 'https:') return url
+    // Plain http is only useful against a local identity provider during
+    // development; in production the client secret would cross the wire.
+    if (url.protocol === 'http:' && process.env.NODE_ENV !== 'production') {
+      return url
+    }
+    return null
   } catch {
     return null
   }

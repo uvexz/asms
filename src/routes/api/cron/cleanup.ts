@@ -1,14 +1,20 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { createHash, timingSafeEqual } from 'node:crypto'
 
 import { runCleanup } from '#/server/services/cleanup'
 
 function authorized(request: Request): boolean {
   const secret = process.env.CRON_SECRET
-  if (!secret) return process.env.NODE_ENV !== 'production'
-  const header = request.headers.get('authorization')
-  if (header === `Bearer ${secret}`) return true
-  const url = new URL(request.url)
-  return url.searchParams.get('secret') === secret
+  if (!secret) return false
+
+  const match = /^Bearer (.+)$/i.exec(
+    request.headers.get('authorization') ?? '',
+  )
+  if (!match) return false
+
+  const provided = createHash('sha256').update(match[1]).digest()
+  const expected = createHash('sha256').update(secret).digest()
+  return timingSafeEqual(provided, expected)
 }
 
 export const Route = createFileRoute('/api/cron/cleanup')({

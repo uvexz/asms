@@ -13,8 +13,8 @@ import {
 export const listMessagesFn = createServerFn({ method: 'GET' })
   .validator(
     z.object({
-      mailboxId: z.string().optional(),
-      page: z.number().int().min(1).optional(),
+      mailboxId: z.string().max(128).optional(),
+      page: z.number().int().min(1).max(1000).optional(),
       pageSize: z.number().int().min(1).max(50).optional(),
       unreadOnly: z.boolean().optional(),
     }),
@@ -24,7 +24,7 @@ export const listMessagesFn = createServerFn({ method: 'GET' })
   )
 
 export const getMessageFn = createServerFn({ method: 'GET' })
-  .validator(z.object({ id: z.string() }))
+  .validator(z.object({ id: z.string().max(128) }))
   .handler(async ({ data }) =>
     asUser(({ user }) => getMessage(user.id, data.id)),
   )
@@ -32,7 +32,7 @@ export const getMessageFn = createServerFn({ method: 'GET' })
 export const markMessageFn = createServerFn({ method: 'POST' })
   .validator(
     z.object({
-      id: z.string(),
+      id: z.string().max(128),
       isRead: z.boolean().optional(),
       isStarred: z.boolean().optional(),
     }),
@@ -48,7 +48,7 @@ export const markMessageFn = createServerFn({ method: 'POST' })
   )
 
 export const markAllReadFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ mailboxId: z.string() }))
+  .validator(z.object({ mailboxId: z.string().max(128) }))
   .handler(async ({ data }) =>
     asUser(async ({ user }) => {
       await markAllRead(user.id, data.mailboxId)
@@ -57,7 +57,7 @@ export const markAllReadFn = createServerFn({ method: 'POST' })
   )
 
 export const deleteMessageFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ id: z.string() }))
+  .validator(z.object({ id: z.string().max(128) }))
   .handler(async ({ data }) =>
     asUser(async ({ user }) => {
       await deleteMessage(user.id, data.id)

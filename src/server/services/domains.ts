@@ -120,6 +120,13 @@ export async function listDomains() {
   }))
 }
 
+const PUBLIC_DOMAIN_TTL_MS = 60_000
+let publicDomainCache: { names: string[]; expiresAt: number } | null = null
+
+export function invalidatePublicDomains() {
+  publicDomainCache = null
+}
+
 export async function addDomain(nameInput: string) {
   const name = nameInput.trim().toLowerCase()
   assert(DOMAIN_RE.test(name), 'INVALID_DOMAIN', '域名格式不正确')
@@ -163,6 +170,7 @@ export async function addDomain(nameInput: string) {
   }
 
   await db.insert(domains).values(row)
+  invalidatePublicDomains()
   return { ...row, adopted }
 }
 
@@ -195,6 +203,7 @@ export async function refreshDomain(id: string) {
     })
     .where(eq(domains.id, id))
 
+  invalidatePublicDomains()
   return { status: data.status, records: data.records }
 }
 
@@ -228,6 +237,7 @@ export async function setDefaultDomain(id: string) {
       .set({ isDefault: true, updatedAt: new Date() })
       .where(eq(domains.id, id))
   })
+  invalidatePublicDomains()
 }
 
 export async function updateDomain(
@@ -245,6 +255,7 @@ export async function updateDomain(
     .update(domains)
     .set({ ...patch, updatedAt: new Date() })
     .where(eq(domains.id, id))
+  invalidatePublicDomains()
 }
 
 export async function removeDomain(id: string) {
@@ -273,6 +284,7 @@ export async function removeDomain(id: string) {
   }
 
   await db.delete(domains).where(eq(domains.id, id))
+  invalidatePublicDomains()
 }
 
 /**
@@ -280,6 +292,15 @@ export async function removeDomain(id: string) {
  * landing page is allowed to publish about a domain — nothing else is.
  */
 export async function publicDomainNames(limit = 4) {
+  if (
+    limit <= 4 &&
+    publicDomainCache &&
+    publicDomainCache.expiresAt > Date.now()
+  ) {
+    return publicDomainCache.names.slice(0, limit)
+  }
+
+  const queryLimit = Math.max(limit, 4)
   const rows = await db
     .select({ name: domains.name })
     .from(domains)
@@ -287,16 +308,14 @@ export async function publicDomainNames(limit = 4) {
       and(eq(domains.status, 'verified'), eq(domains.receivingEnabled, true)),
     )
     .orderBy(desc(domains.isDefault), domains.name)
-    .limit(limit)
+    .limit(queryLimit)
 
-  return rows.map((row) => row.name)
-}
-
-export async function countDomains() {
-  const row = await db
-    .select({ value: count() })
-    .from(domains)
-    .where(and(eq(domains.status, 'verified')))
-    .get()
-  return row?.value ?? 0
+  const names = rows.map((row) => row.name)
+  if (limit <= 4) {
+    publicDomainCache = {
+      names: names.slice(0, 4),
+      expiresAt: Date.now() + PUBLIC_DOMAIN_TTL_MS,
+    }
+  }
+  return names.slice(0, limit)
 }
