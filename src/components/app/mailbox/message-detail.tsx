@@ -18,6 +18,7 @@ import {
 } from '@/components/foundations/scroll-fade/scroll-fade'
 import { formatBytes, formatFullDateTime } from '@/lib/format'
 import { cx } from '@/utils/cx'
+import { PanelHeader } from './panel-header'
 import type { MessageDetailData } from './types'
 
 export function MessageDetail({
@@ -55,38 +56,38 @@ export function MessageDetail({
         selected ? 'flex' : 'hidden md:flex',
       )}
     >
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-separator-border px-3 py-2">
-        <div className="flex min-w-0 items-center gap-1">
-          <IconButton
-            aria-label="返回邮件列表"
-            icon={RiArrowLeftLine}
-            size="small"
-            onClick={onBack}
-            className="md:hidden"
-          />
-          <span className="truncate text-caption-1-regular text-text-tertiary">
-            {selected && mailboxAddress
-              ? `发往 ${mailboxAddress}`
-              : '邮件详情'}
-          </span>
-        </div>
-        {message ? (
-          <div className="flex shrink-0 items-center gap-0.5">
+      <PanelHeader
+        title={selected && mailboxAddress ? `发往 ${mailboxAddress}` : '邮件详情'}
+        leading={
+          selected ? (
             <IconButton
-              aria-label={message.isRead ? '标为未读' : '标为已读'}
-              icon={message.isRead ? RiMailUnreadLine : RiMailOpenLine}
+              aria-label="返回邮件列表"
+              icon={RiArrowLeftLine}
               size="small"
-              onClick={onToggleRead}
+              onClick={onBack}
+              className="md:hidden"
             />
-            <IconButton
-              aria-label="删除邮件"
-              icon={RiDeleteBin6Line}
-              size="small"
-              onClick={onDelete}
-            />
-          </div>
-        ) : null}
-      </div>
+          ) : null
+        }
+        actions={
+          message ? (
+            <>
+              <IconButton
+                aria-label={message.isRead ? '标为未读' : '标为已读'}
+                icon={message.isRead ? RiMailUnreadLine : RiMailOpenLine}
+                size="small"
+                onClick={onToggleRead}
+              />
+              <IconButton
+                aria-label="删除邮件"
+                icon={RiDeleteBin6Line}
+                size="small"
+                onClick={onDelete}
+              />
+            </>
+          ) : undefined
+        }
+      />
 
       <div className="relative min-h-0 flex-1">
         <div

@@ -21,6 +21,7 @@ import {
 } from '@/components/foundations/scroll-fade/scroll-fade'
 import { countdown, formatRelative } from '@/lib/format'
 import { cx } from '@/utils/cx'
+import { PanelHeader } from './panel-header'
 import type { MailboxSummary } from './types'
 
 export function MailboxRail({
@@ -48,12 +49,14 @@ export function MailboxRail({
 
   return (
     <aside className="hidden min-h-0 flex-col overflow-hidden rounded-3xl border border-border-button-default bg-background-primary-default xl:flex">
-      <div className="flex shrink-0 items-center justify-between border-b border-separator-border px-4 py-3">
-        <span className="text-caption-1-semibold text-text-tertiary">邮箱</span>
-        <span className="text-caption-1-regular text-text-tertiary">
-          {mailboxes.length}
-        </span>
-      </div>
+      <PanelHeader
+        title="邮箱"
+        actions={
+          <span className="text-caption-1-regular text-text-tertiary">
+            {mailboxes.length}
+          </span>
+        }
+      />
 
       <div className="relative min-h-0 flex-1">
         <div

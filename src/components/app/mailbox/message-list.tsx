@@ -25,6 +25,7 @@ import {
 } from '@/components/foundations/scroll-fade/scroll-fade'
 import { countdown, formatRelative } from '@/lib/format'
 import { cx } from '@/utils/cx'
+import { PanelHeader } from './panel-header'
 import type { MailboxSummary, MessageSummary } from './types'
 
 export function MessageList({
@@ -84,17 +85,11 @@ export function MessageList({
         detailOpen ? 'hidden md:flex' : 'flex',
       )}
     >
-      <div className="flex shrink-0 flex-col gap-2 border-b border-separator-border px-4 pt-3 pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 flex-col">
-            <span className="truncate text-body-medium text-text-primary">
-              {mailbox?.address ?? '全部邮件'}
-            </span>
-            <span className="truncate text-caption-1-regular text-text-tertiary">
-              {subtitle}
-            </span>
-          </div>
-          <div className="flex shrink-0 items-center gap-0.5">
+      <PanelHeader
+        title={mailbox?.address ?? '全部邮件'}
+        subtitle={subtitle}
+        actions={
+          <>
             {mailbox?.kind === 'temporary' ? (
               <Button
                 size="xs"
@@ -141,27 +136,30 @@ export function MessageList({
               size="small"
               onClick={onRefresh}
             />
-          </div>
-        </div>
+          </>
+        }
+      />
 
-        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] xl:hidden">
+      {/* Below xl the rail is hidden, so these pills are the only way to switch
+          mailboxes. They live outside the header: a second row inside it would
+          make this header taller than the detail pane's and break the divider. */}
+      <div className="flex shrink-0 gap-1.5 overflow-x-auto px-4 pt-2 pb-1 [scrollbar-width:none] xl:hidden">
+        <FilterPill
+          active={!mailbox}
+          label="全部"
+          count={totalUnread}
+          onClick={() => onSelectMailbox(undefined)}
+        />
+        {mailboxes.map((item) => (
           <FilterPill
-            active={!mailbox}
-            label="全部"
-            count={totalUnread}
-            onClick={() => onSelectMailbox(undefined)}
+            key={item.id}
+            active={item.id === mailbox?.id}
+            label={item.address}
+            count={item.unread}
+            temporary={item.kind === 'temporary'}
+            onClick={() => onSelectMailbox(item.id)}
           />
-          {mailboxes.map((item) => (
-            <FilterPill
-              key={item.id}
-              active={item.id === mailbox?.id}
-              label={item.address}
-              count={item.unread}
-              temporary={item.kind === 'temporary'}
-              onClick={() => onSelectMailbox(item.id)}
-            />
-          ))}
-        </div>
+        ))}
       </div>
 
       <div className="relative min-h-0 flex-1">
