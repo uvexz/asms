@@ -76,6 +76,13 @@ function fromRow(
     discoveryUrl: discoveryUrl(row.issuer),
     scopes: scopes.length > 0 ? scopes : defaultScopes(provider),
     pkce: true,
+    // Better Auth turns sign-out into an RP-initiated logout as soon as an
+    // issuer publishes `end_session_endpoint`: it answers with a provider URL
+    // and the client navigates there, abandoning `/login`. We send no
+    // `post_logout_redirect_uri`, so the provider has nowhere to send the user
+    // back and they are stranded on the identity provider. Signing out here
+    // means signing out of this site.
+    disableProviderLogout: true,
     ...(provider === 'linuxdo' ? { mapProfileToUser: linuxDoProfile } : {}),
   }
 }
@@ -97,6 +104,7 @@ function fromEnv(): GenericOAuthConfig | null {
     redirectURI: process.env.OIDC_REDIRECT_URI?.trim() || undefined,
     scopes: parseScopes(process.env.OIDC_SCOPES ?? DEFAULT_OIDC_SCOPES),
     pkce: true,
+    disableProviderLogout: true,
   }
 }
 
