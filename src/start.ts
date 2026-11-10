@@ -8,10 +8,13 @@ import { assertRuntimeEnv } from '#/server/env'
 import { clientIpFromHeaders } from '#/server/ip'
 import { consumeServerFnRateLimit, tooManyRequests } from '#/server/rate-limit'
 
-// Run while the start entry is loaded, not inside getOptions: a throw inside
-// the options callback is logged and the request continues without these
-// middlewares, which is the opposite of failing closed.
-assertRuntimeEnv()
+const envMiddleware = createMiddleware().server((ctx) => {
+  // Request middleware bodies are server-only; this keeps production secret
+  // checks out of the browser bundle and fails the first request when the
+  // deployment is misconfigured.
+  assertRuntimeEnv()
+  return ctx.next()
+})
 
 const csrfMiddleware = createCsrfMiddleware({
   filter: (ctx) => ctx.handlerType === 'serverFn',
@@ -45,6 +48,7 @@ const privateCacheMiddleware = createMiddleware().server(async (ctx) => {
 export const startInstance = createStart(() => {
   return {
     requestMiddleware: [
+      envMiddleware,
       csrfMiddleware,
       rateLimitMiddleware,
       privateCacheMiddleware,
