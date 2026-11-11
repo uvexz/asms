@@ -11,8 +11,7 @@ export function useMailPolicy(options?: { enabled?: boolean }) {
   return {
     policy: query.data?.ok ? query.data.data : null,
     isLoading: query.isLoading,
-    isError:
-      query.isError || Boolean(query.data && !query.data.ok),
+    isError: query.isError || Boolean(query.data && !query.data.ok),
     refetch: query.refetch,
   }
 }
