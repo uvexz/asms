@@ -19,7 +19,7 @@ export const Route = createFileRoute('/')({
       {
         name: 'description',
         content:
-          '长期邮箱与临时邮箱并存。收件写入你自己的数据库，发件走 Resend。',
+          '长期地址、临时地址都能开：收到的信进你自己的数据库，发信走 Resend。',
       },
     ],
     links: [{ rel: 'stylesheet', href: landingCss }],
@@ -37,15 +37,15 @@ export const Route = createFileRoute('/')({
 const CAPABILITIES = [
   {
     term: '长期邮箱',
-    detail: '地址长期归你，收到的邮件实时入库。',
+    detail: '地址一直归你。来信自动进收件箱，随时能翻。',
   },
   {
     term: '临时邮箱',
-    detail: '开一个临时地址，期内收到邮件即保留，否则到期失效。',
+    detail: '开个临时地址。收到信就留下，没收到就作废。',
   },
   {
     term: '发件',
-    detail: '用自己的域名发信，回信进同一个收件箱。',
+    detail: '用你的邮箱地址发信，回信也回到这里。',
   },
 ] as const
 
@@ -97,7 +97,9 @@ function LandingPage() {
             </h1>
 
             <p className="landing-enter landing-d-3 max-w-[33rem] text-title-3-regular leading-7 text-text-secondary">
-              收件实时入库，发件走 Resend，邮件保存在你自己的数据库里。
+              {
+                '收到的信存在你自己的数据库，发信交给 Resend。没有别人的收件箱插在中间。'
+              }
             </p>
           </div>
 
@@ -127,8 +129,8 @@ function LandingPage() {
                   {needsVerification
                     ? '验证邮箱'
                     : isAdmin
-                      ? '进入管理后台'
-                      : '进入邮箱面板'}
+                      ? '打开管理后台'
+                      : '打开收件箱'}
                 </ButtonLink>
               </div>
             ) : (
@@ -148,7 +150,7 @@ function LandingPage() {
       <footer className="mx-auto mt-8 w-full max-w-[1120px] px-6 sm:px-8">
         <div className="flex flex-col gap-1 border-t border-separator-border py-8 text-caption-1-regular text-text-tertiary sm:flex-row sm:items-center sm:justify-between">
           <span>{config.siteName}</span>
-          <span>{config.footerText || '由 Resend 提供投递'}</span>
+          <span>{config.footerText || 'Resend 负责投递'}</span>
         </div>
       </footer>
     </main>

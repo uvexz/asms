@@ -160,7 +160,7 @@ export function LoginPanel({
             登录
           </Heading>
           <p className="text-body-regular text-text-secondary">
-            用你的账号进入邮箱面板。
+            回到你的收件箱。
           </p>
         </div>
 
