@@ -150,7 +150,26 @@ function LandingPage() {
       <footer className="mx-auto mt-8 w-full max-w-[1120px] px-6 sm:px-8">
         <div className="flex flex-col gap-1 border-t border-separator-border py-8 text-caption-1-regular text-text-tertiary sm:flex-row sm:items-center sm:justify-between">
           <span>{config.siteName}</span>
-          <span>{config.footerText || 'Resend 负责投递'}</span>
+          <span className="flex flex-wrap items-center gap-x-2">
+            {config.footerText ? (
+              <>
+                <span>{config.footerText}</span>
+                <span aria-hidden>·</span>
+              </>
+            ) : null}
+            <span>
+              由 Resend 及{' '}
+              <a
+                href="https://github.com/uvexz/asms"
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-sm text-text-secondary underline-offset-2 outline-none hover:text-text-primary hover:underline focus-visible:ring-2 focus-visible:ring-border-focus-ring"
+              >
+                ASMS
+              </a>{' '}
+              驱动
+            </span>
+          </span>
         </div>
       </footer>
     </main>
