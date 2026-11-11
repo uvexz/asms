@@ -34,6 +34,7 @@ import { Route as AppTempRouteImport } from './routes/app/temp'
 import { Route as ApiAttachmentsIdRouteImport } from './routes/api/attachments/$id'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiCronCleanupRouteImport } from './routes/api/cron/cleanup'
+import { Route as ApiTelegramWebhookRouteImport } from './routes/api/telegram/webhook'
 import { Route as ApiWebhooksResendRouteImport } from './routes/api/webhooks/resend'
 import { Route as AppInboxMailboxIdRouteImport } from './routes/app/inbox.$mailboxId'
 
@@ -162,6 +163,11 @@ const ApiCronCleanupRoute = ApiCronCleanupRouteImport.update({
   path: '/api/cron/cleanup',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTelegramWebhookRoute = ApiTelegramWebhookRouteImport.update({
+  id: '/api/telegram/webhook',
+  path: '/api/telegram/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiWebhooksResendRoute = ApiWebhooksResendRouteImport.update({
   id: '/api/webhooks/resend',
   path: '/api/webhooks/resend',
@@ -199,6 +205,7 @@ export interface FileRoutesByFullPath {
   '/api/attachments/$id': typeof ApiAttachmentsIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/cron/cleanup': typeof ApiCronCleanupRoute
+  '/api/telegram/webhook': typeof ApiTelegramWebhookRoute
   '/api/webhooks/resend': typeof ApiWebhooksResendRoute
   '/app/inbox/$mailboxId': typeof AppInboxMailboxIdRoute
 }
@@ -226,6 +233,7 @@ export interface FileRoutesByTo {
   '/api/attachments/$id': typeof ApiAttachmentsIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/cron/cleanup': typeof ApiCronCleanupRoute
+  '/api/telegram/webhook': typeof ApiTelegramWebhookRoute
   '/api/webhooks/resend': typeof ApiWebhooksResendRoute
   '/app/inbox/$mailboxId': typeof AppInboxMailboxIdRoute
 }
@@ -256,6 +264,7 @@ export interface FileRoutesById {
   '/api/attachments/$id': typeof ApiAttachmentsIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/cron/cleanup': typeof ApiCronCleanupRoute
+  '/api/telegram/webhook': typeof ApiTelegramWebhookRoute
   '/api/webhooks/resend': typeof ApiWebhooksResendRoute
   '/app/inbox/$mailboxId': typeof AppInboxMailboxIdRoute
 }
@@ -287,6 +296,7 @@ export interface FileRouteTypes {
     | '/api/attachments/$id'
     | '/api/auth/$'
     | '/api/cron/cleanup'
+    | '/api/telegram/webhook'
     | '/api/webhooks/resend'
     | '/app/inbox/$mailboxId'
   fileRoutesByTo: FileRoutesByTo
@@ -314,6 +324,7 @@ export interface FileRouteTypes {
     | '/api/attachments/$id'
     | '/api/auth/$'
     | '/api/cron/cleanup'
+    | '/api/telegram/webhook'
     | '/api/webhooks/resend'
     | '/app/inbox/$mailboxId'
   id:
@@ -343,6 +354,7 @@ export interface FileRouteTypes {
     | '/api/attachments/$id'
     | '/api/auth/$'
     | '/api/cron/cleanup'
+    | '/api/telegram/webhook'
     | '/api/webhooks/resend'
     | '/app/inbox/$mailboxId'
   fileRoutesById: FileRoutesById
@@ -360,6 +372,7 @@ export interface RootRouteChildren {
   ApiAttachmentsIdRoute: typeof ApiAttachmentsIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiCronCleanupRoute: typeof ApiCronCleanupRoute
+  ApiTelegramWebhookRoute: typeof ApiTelegramWebhookRoute
   ApiWebhooksResendRoute: typeof ApiWebhooksResendRoute
 }
 
@@ -540,6 +553,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCronCleanupRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/telegram/webhook': {
+      id: '/api/telegram/webhook'
+      path: '/api/telegram/webhook'
+      fullPath: '/api/telegram/webhook'
+      preLoaderRoute: typeof ApiTelegramWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/webhooks/resend': {
       id: '/api/webhooks/resend'
       path: '/api/webhooks/resend'
@@ -614,6 +634,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAttachmentsIdRoute: ApiAttachmentsIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiCronCleanupRoute: ApiCronCleanupRoute,
+  ApiTelegramWebhookRoute: ApiTelegramWebhookRoute,
   ApiWebhooksResendRoute: ApiWebhooksResendRoute,
 }
 export const routeTree = rootRouteImport

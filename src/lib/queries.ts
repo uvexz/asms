@@ -2,6 +2,7 @@ import { queryOptions } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
 
 import { linkedAccountsFn } from '@/server/functions/account'
+import { telegramLinkStatusFn } from '@/server/functions/telegram'
 import {
   adminAuditFn,
   adminDomainsFn,
@@ -72,6 +73,7 @@ export const queryKeys = {
   sentDetail: (id: string) => ['mail', 'sent-detail', id] as const,
   sendUsage: ['mail', 'send-usage'] as const,
   linkedAccounts: ['mail', 'linked-accounts'] as const,
+  telegramLink: ['mail', 'telegram-link'] as const,
 
   adminOverview: ['admin', 'overview'] as const,
   adminUsers: ['admin', 'users'] as const,
@@ -204,6 +206,14 @@ export function linkedAccountsQuery() {
   return queryOptions({
     queryKey: queryKeys.linkedAccounts,
     queryFn: () => linkedAccountsFn(),
+    staleTime: STALE_TIME.user,
+  })
+}
+
+export function telegramLinkQuery() {
+  return queryOptions({
+    queryKey: queryKeys.telegramLink,
+    queryFn: () => telegramLinkStatusFn(),
     staleTime: STALE_TIME.user,
   })
 }

@@ -15,5 +15,6 @@ src/components
 src/styles
 src/utils
 src/routeTree.gen.ts
+src/server/telegram/widget.html
 
 .workbuddy

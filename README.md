@@ -31,6 +31,28 @@
 
 管理员不受邮箱数量与发件额度限制。
 
+### Telegram Bot（可选）
+
+在 Telegram 私聊里用一张 In-Message Widgets 卡片管理真实 asms 邮箱：Web 端绑定账号后，可以直接创建临时邮箱、切换邮箱、刷新收件箱、阅读/删除邮件。真实收件仍走上面的 Resend 入站链路，Bot 只是读写同一份邮箱/邮件数据；不使用 Mock，也不接 Mail.tm。
+
+- **账号绑定**：个人设置 → Telegram Bot → 连接。深链 10 分钟有效、一次性；Bot 消费后写入 `telegram_links`，一个 asms 账号只对应一个 Telegram 账号。
+- **Bot 命令**：`/start`、`/create [prefix]`。`/start <token>` 用于深链绑定。
+- **邮箱范围**：Bot 只创建和删除**临时邮箱**；长期邮箱在 Web 端创建/删除，Bot 可以列出、切换和阅读。
+- **真实收件**：Bot 创建的临时邮箱是真实 `mailboxes` 行，Resend 入站会正常投递；已读/删除会同步回 Web 端。
+- **客户端要求**：需要最新版 Telegram（In-Message Widgets 是 Bot API 10.4 的新能力）；生产环境仅支持与 Bot 的私聊，发送后的卡片不可转发。
+- **卡片限制**：HTML 发送后不可替换；受 32KB / 4KB 压缩与 1KB 状态限制，收件箱每页 4 封、正文按页加载；Widget 内无键盘、无滚动，自定义前缀需在聊天中发送 `/create name`。
+
+配置步骤：
+
+1. @BotFather 创建 Bot。
+2. 在 `.env.local` 或部署平台填写 `TELEGRAM_BOT_TOKEN`、`TELEGRAM_BOT_USERNAME`、`TELEGRAM_WEBHOOK_SECRET`。
+3. 建表：`bun run db:generate`，开发执行 `bun run db:push`，生产执行 `bun run db:migrate`。
+4. 本地：`bun run dev` + 另开一个终端 `bun run bot:poll`（长轮询，不需要公网）。
+5. 生产：部署后执行 `bun run bot:webhook set`；`info` / `delete` 用于排障。
+6. Web 端 `/app/settings` 连接 Telegram，打开深链并发送 `/start`。
+
+辅助命令：`bun run bot:widget`（体积/外部资源检查）、`bun run bot:preview`（浏览器预览 Widget）、`bun run bot:test`（纯逻辑单测）。
+
 ## 本地启动
 
 ```bash
@@ -115,6 +137,13 @@ Resend Dashboard → Webhooks → 添加：
 | `OIDC_CLIENT_SECRET`           | 否       | 同上                                                                          |
 | `OIDC_REDIRECT_URI`            | 否       | 默认 `<BETTER_AUTH_URL>/api/auth/callback/sb`                                 |
 | `OIDC_SCOPES`                  | 否       | 默认 `openid profile email offline_access`                                    |
+| `TELEGRAM_BOT_TOKEN`           | Bot 启用 | @BotFather 的 Bot Token                                                       |
+| `TELEGRAM_BOT_USERNAME`        | Bot 启用 | 不带 `@`，用于生成 `t.me` 深链与设置页                                        |
+| `TELEGRAM_WEBHOOK_SECRET`      | Bot 启用 | `setWebhook` 的 secret_token；仅 `A-Za-z0-9_-`                                |
+| `TELEGRAM_WEBHOOK_URL`         | 否       | 默认 `<BETTER_AUTH_URL>/api/telegram/webhook`                                 |
+| `TELEGRAM_WIDGET_HEIGHT`       | 否       | Widget 高度，默认 540                                                         |
+| `TELEGRAM_BODY_PAGE_CHARS`     | 否       | 正文每页字符上限，默认 420                                                    |
+| `TELEGRAM_BODY_PAGE_BYTES`     | 否       | 正文每页 UTF-8 字节上限，默认 700                                             |
 | `PORT`                         | 否       | Node 服务端口，默认 3000                                                      |
 
 `OIDC_*` 只在面板里还没有保存过 sb.sb 时生效：保存（或关闭）后完全以数据库为准。回调地址需在 sb.sb 登记为 `<BETTER_AUTH_URL>/api/auth/callback/sb`；scope 必须包含 `email`，否则第三方账号不会返回登录邮箱。
@@ -195,6 +224,7 @@ src/
     functions/            服务端函数（鉴权 + zod 校验）
     services/             邮箱、收件、发件、配额、域名、清理、审计
     integrations/         Resend、S3、加密
+    telegram/             Telegram Bot：widget.html、handler、会话/链接存储、真实邮箱适配
     settings.ts           设置注册表（默认值 + 校验 + 加密）
   db/                     Drizzle schema 与 libSQL 连接
   components/             BoardUI 组件（按 registry 安装）
@@ -209,6 +239,7 @@ drizzle/                  迁移文件
 - 不做邮件转发、自动回复、别名、全文搜索（列表按时间分页）。
 - 收件箱通过 15 秒轮询刷新，不是 WebSocket 推送。
 - 地址前缀允许小写字母、数字、`.`、`_`、`-`，首尾必须是字母或数字。
+- Telegram Bot 的卡片是 In-Message Widgets：生产环境仅私聊、不可转发；HTML 发送后不可替换，改样式需重新 `/start`；收件箱每页 4 封、正文分页；附件只提示，不在 Widget 内下载；Bot 只管理临时邮箱的创建/删除。
 
 ## 脚本
 
@@ -221,4 +252,9 @@ bun run check        # Prettier 检查
 bun run db:generate  # 生成迁移
 bun run db:migrate   # 执行迁移
 bun run db:studio    # Drizzle Studio
+bun run bot:poll     # 本地 Bot 长轮询（无需 webhook）
+bun run bot:webhook  # set / info / delete Telegram webhook
+bun run bot:widget   # 校验 widget.html 体积与外部资源
+bun run bot:preview  # 浏览器预览 Widget
+bun run bot:test     # Bot 纯逻辑单测
 ```

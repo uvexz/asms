@@ -1,0 +1,107 @@
+<style>
+*{box-sizing:border-box}html,body{height:100%;margin:0}body{font-family:system-ui,sans-serif;background:transparent;color:var(--tg-theme-text-color,#111);overflow:hidden}#w{height:100%;display:flex;flex-direction:column;gap:6px;padding:10px 12px 28px;overflow:hidden;font-size:14px}.top{display:flex;align-items:flex-start;gap:8px}.adr{flex:1;min-width:0;font-weight:600;font-size:15px;line-height:1.25;word-break:break-all;user-select:text}.dom{color:var(--tg-theme-hint-color,#777);font-weight:400;font-size:12px}.tag{font-size:10px;color:var(--tg-theme-hint-color,#777);border:1px solid currentColor;border-radius:999px;padding:0 5px;margin-left:6px;vertical-align:middle;font-weight:400}.btn{appearance:none;border:0;border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;background:var(--tg-theme-secondary-bg-color,rgba(0,0,0,.06));color:inherit;cursor:pointer}.btn:disabled{opacity:.5}.pri{background:var(--tg-theme-button-color,#3390ec);color:var(--tg-theme-button-text-color,#fff);font-weight:600}.danger{color:var(--tg-theme-destructive-text-color,#c00)}.sm{padding:4px 8px;font-size:12px}.bar{display:flex;align-items:center;gap:6px;min-height:20px}.grow{flex:1}.u{color:var(--tg-theme-hint-color,#777);font-size:12px}.cs{display:flex;flex-wrap:wrap;gap:5px;overflow:hidden}.c{max-width:48%;display:flex;gap:4px;align-items:center;border:1px solid var(--tg-theme-section-separator-color,rgba(0,0,0,.12));background:transparent;border-radius:999px;padding:4px 8px;font:inherit;font-size:12px;color:inherit;cursor:pointer}.c.on{background:var(--tg-theme-button-color,#3390ec);border-color:transparent;color:var(--tg-theme-button-text-color,#fff)}.c span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.c i{font-style:normal;font-size:10px;background:var(--tg-theme-link-color,#3390ec);color:#fff;border-radius:999px;padding:0 4px}.c.on i{background:rgba(255,255,255,.25)}.list{flex:1;min-height:0;display:flex;flex-direction:column;gap:3px;overflow:hidden}.q{display:flex;flex-direction:column;gap:2px;text-align:left;border:0;background:transparent;color:inherit;border-radius:8px;padding:6px 8px;font:inherit;cursor:pointer;min-height:0}.q:active{background:var(--tg-theme-secondary-bg-color,rgba(0,0,0,.06))}.mrow{display:flex;gap:6px;align-items:baseline}.from{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}.time{font-size:11px;color:var(--tg-theme-hint-color,#777);flex:none}.subj{font-size:12px;color:var(--tg-theme-hint-color,#777);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.n .from{font-weight:600}.n .subj{color:var(--tg-theme-text-color,#111);font-weight:500}.dot{width:6px;height:6px;border-radius:50%;background:var(--tg-theme-link-color,#3390ec);flex:none}.e{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--tg-theme-hint-color,#777);text-align:center}.err{color:var(--tg-theme-destructive-text-color,#c00);font-size:12px;line-height:1.3}.foot{display:flex;gap:6px;align-items:center}.foot .pri{flex:1}.h{font-size:11px;color:var(--tg-theme-hint-color,#777);text-align:center;line-height:1.2}.mhead{display:flex;flex-direction:column;gap:2px}.msub{font-weight:600;font-size:14px;line-height:1.25;max-height:2.5em;overflow:hidden}.mfrom{font-size:12px;color:var(--tg-theme-hint-color,#777);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.body{flex:1;min-height:0;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.45;user-select:text}.k{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:0 8px}
+</style><div id="w"></div><script>
+(function(){
+var W=window.TelegramWidget,root=document.getElementById('w'),S=null,busy=false,err='',conf=null,B={},page=0,pending=null,ct=null;
+function el(t,c,x){var n=document.createElement(t);if(c)n.className=c;if(x!=null)n.textContent=x;return n}
+function btn(t,c,f,dis){var n=el('button','btn '+c,t);n.onclick=f;if(dis)n.disabled=true;return n}
+var ERRS={unlinked:'账户未连接，请先在网页设置中连接 Telegram',banned:'账户已被封禁',reset:'会话已重置，请发送 /start',limit:'临时邮箱数量已达上限',taken:'该地址已被占用',invalid:'前缀格式不正确',expired:'邮箱已过期',gone:'内容已不存在，请刷新',permanent:'长期邮箱请在网页端删除',domain:'管理员尚未配置可用域名',busy:'操作太快，请稍候',internal:'操作失败，请重试'};
+function errT(c){return ERRS[c]||'操作失败，请重试'}
+function parse(){try{S=JSON.parse(W.chatData||'null')}catch(x){S=null}if(!S||S.v!==1)S=null}
+function k(){return S&&(S.e==='unlinked'||S.e==='banned'||S.e==='reset')}
+function clearConf(){conf=null;if(ct){clearTimeout(ct);ct=null}}
+function setConf(k,ref){clearConf();conf={k:k,ref:ref};ct=setTimeout(function(){clearConf();render()},3000);render()}
+function copy(){if(W&&W.copyText&&S&&S.a)W.copyText(S.a)}
+function reqBody(ref,n,silent){if(!ref||n<0)return;var b=B[ref];if(b&&b.total&&n>=b.total)return;page=n;if(b&&b.pages[n]!=null){render();return}pending=ref;send('body:'+ref+':'+n,silent)}
+function send(data,silent){
+ if(!W||!W.request){if(!silent)err='当前客户端不支持操作';render();return}
+ if(busy)return;busy=true;err='';
+ var p;try{p=W.request(data)}catch(x){busy=false;if(!silent)err=errT(x&&x.code);render();return}
+ render();
+ function done(){busy=false;render()}
+ p.then(function(r){
+  var v=r&&r.result;if(!v)return;
+  if(v.indexOf('ok:')===0||v.indexOf('same:')===0)return;
+  if(v.indexOf('err:')===0){err=errT(v.slice(4));return}
+  var m=/^(\d+)\/(\d+)#(\d+)\n([\s\S]*)$/.exec(v);
+  if(m){var sq=+m[3];if(S&&sq<S.s)return;var ref=pending;if(ref){var b=B[ref]||(B[ref]={pages:{},total:0});b.pages[+m[1]]=m[4];b.total=+m[2];page=+m[1]}}
+ },function(x){if(!silent)err=errT(x&&x.code)}).then(done,done);
+}
+function sync(){
+ var oldOpen=S&&S.w===1&&S.o?S.o[0]:null,oldSeq=S?S.s:-1;
+ parse();err='';
+ var newOpen=S&&S.w===1&&S.o?S.o[0]:null;
+ if(newOpen!==oldOpen)page=0;
+ if(S&&S.s!==oldSeq)clearConf();
+ render();
+ if(newOpen&&!(B[newOpen]&&B[newOpen].pages[0]!=null))reqBody(newOpen,0,true);
+}
+function auto(){
+ if(busy||conf)return;
+ if(!S||S.b!==1||S.w!==0)return;
+ if(!W.isActive)return;
+ if(document.hidden)return;
+ if(W.isForward||W.isPreview)return;
+ if(W.chatType&&W.chatType!=='private')return;
+ send('refresh',true);
+}
+function render(){
+ root.textContent='';
+ if(!S){root.appendChild(el('div','k',W?'状态不可用，请发送 /start':'请在 Telegram 中打开'));return}
+ if(k()){
+  var bd=el('div','k');bd.appendChild(el('div','',errT(S.e)));bd.appendChild(btn('刷新','sm',function(){send('refresh')},busy));root.appendChild(bd);return;
+ }
+ var msg=err||(S.e?errT(S.e):'');
+ if(S.w===1){
+  var o=S.o||[],ref=o[0],bb=ref?B[ref]:null,tot=bb?bb.total:0;
+  var top=el('div','bar');top.appendChild(btn('‹ 返回','sm',function(){send('back')},busy));top.appendChild(el('span','grow'));top.appendChild(el('span','u',o[3]||''));root.appendChild(top);
+  var hd=el('div','mhead');hd.appendChild(el('div','msub',o[2]||'(无主题)'));hd.appendChild(el('div','mfrom',o[1]||''));if(o[4])hd.appendChild(el('div','u','含附件，请在网页端查看'));root.appendChild(hd);
+  var body=el('div','body');body.textContent=bb&&bb.pages[page]!=null?bb.pages[page]:(busy?'加载中…':'正文未加载');root.appendChild(body);
+  if(msg)root.appendChild(el('div','err',msg));
+  var pg=el('div','bar');
+  if(!busy&&(!bb||bb.pages[page]==null))pg.appendChild(btn('加载正文','sm',function(){reqBody(ref,page)},busy));
+  pg.appendChild(btn('上一页','sm',function(){reqBody(ref,page-1)},busy||page<=0));
+  pg.appendChild(el('span','u',tot?(page+1)+'/'+tot:'加载中'));
+  pg.appendChild(btn('下一页','sm',function(){reqBody(ref,page+1)},busy||!tot||page>=tot-1));
+  pg.appendChild(el('span','grow'));
+  pg.appendChild(btn(conf&&conf.k==='msg'&&conf.ref===ref?'确认删除':'删除','danger',function(){if(conf&&conf.k==='msg'&&conf.ref===ref){clearConf();send('msg:del:'+ref)}else setConf('msg',ref)},busy));
+  root.appendChild(pg);return;
+ }
+ if(S.a){
+  var at=S.a.lastIndexOf('@'),adr=el('div','adr');
+  adr.appendChild(el('span','',at>0?S.a.slice(0,at):S.a));
+  adr.appendChild(el('span','dom',at>0?S.a.slice(at):''));
+  adr.appendChild(el('span','tag',S.k===1?'长期':'临时'));
+  var tp=el('div','top');tp.appendChild(adr);tp.appendChild(btn('复制','sm',copy));root.appendChild(tp);
+  if(S.lz>1){var mb=el('div','bar');mb.appendChild(btn('‹','sm',function(){send('mbpg:'+(S.lp-1))},busy||S.lp<=0));mb.appendChild(el('span','u','邮箱 '+(S.lp+1)+'/'+S.lz));mb.appendChild(btn('›','sm',function(){send('mbpg:'+(S.lp+1))},busy||S.lp>=S.lz-1));root.appendChild(mb)}
+ }
+ if(S.l&&S.l.length){
+  var cs=el('div','cs');
+  S.l.forEach(function(x){var c=el('button','c'+(x[0]===S.m?' on':''));c.onclick=function(){send('switch:'+x[0])};if(busy)c.disabled=true;c.appendChild(el('span','',x[1]));if(x[2])c.appendChild(el('i','',String(x[2])));cs.appendChild(c)});
+  root.appendChild(cs);
+ }
+ var list=el('div','list');
+ if(!S.m){
+  var em=el('div','e');em.appendChild(el('div','','还没有邮箱'));em.appendChild(btn('生成临时邮箱','pri',function(){send('create')},busy));em.appendChild(el('div','h','或发送 /create 名称'));list.appendChild(em);
+ }else if(!S.i||!S.i.length){
+  var em2=el('div','e');em2.appendChild(el('div','','暂无邮件'));em2.appendChild(btn('刷新','sm',function(){send('refresh')},busy));list.appendChild(em2);
+ }else{
+  S.i.forEach(function(x){var m=el('button','q'+(x[4]?' n':''));m.onclick=function(){pending=x[0];send('read:'+x[0])};if(busy)m.disabled=true;var rw=el('div','mrow');if(x[4])rw.appendChild(el('span','dot'));rw.appendChild(el('span','from',x[1]));rw.appendChild(el('span','time',x[3]));m.appendChild(rw);m.appendChild(el('div','subj',x[2]||'(无主题)'));list.appendChild(m)});
+ }
+ root.appendChild(list);
+ if(msg)root.appendChild(el('div','err',msg));
+ if(S.m){
+  if(S.i&&S.i.length){var ip=el('div','bar');ip.appendChild(btn('‹','sm',function(){send('page:'+(S.p-1))},busy||S.p<=0));ip.appendChild(el('span','u',(S.p+1)+'/'+S.z));ip.appendChild(btn('›','sm',function(){send('page:'+(S.p+1))},busy||S.p>=S.z-1));ip.appendChild(el('span','grow'));ip.appendChild(btn('刷新','sm',function(){send('refresh')},busy));root.appendChild(ip)}
+  var ft=el('div','foot');ft.appendChild(btn('新建临时邮箱','pri',function(){send('create')},busy));if(S.k!==1)ft.appendChild(btn(conf&&conf.k==='mb'&&conf.ref===S.m?'确认销毁':'销毁','danger',function(){if(conf&&conf.k==='mb'&&conf.ref===S.m){clearConf();send('mb:del:'+S.m)}else setConf('mb',S.m)},busy));root.appendChild(ft);root.appendChild(el('div','h','自定义前缀：/create 名称'));
+ }
+}
+if(!W){root.appendChild(el('div','k','请在 Telegram 中打开'));return}
+if(W.onEvent){W.onEvent('chatDataChanged',sync);W.onEvent('activated',auto)}
+parse();
+if(!S)root.appendChild(el('div','k','状态不可用，请发送 /start'));
+else{render();if(W.ready)W.ready()}
+setInterval(auto,15000);
+setTimeout(auto,300);
+if(S&&S.w===1&&S.o&&!(B[S.o[0]]&&B[S.o[0]].pages[0]!=null))setTimeout(function(){reqBody(S.o[0],0,true)},300);
+})();
+</script>

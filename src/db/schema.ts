@@ -355,3 +355,55 @@ export const ingestEvents = sqliteTable(
   },
   (t) => [index('ingest_time_idx').on(t.createdAt)],
 )
+
+/* ------------------------------------------------------------------ */
+/* Telegram bot                                                        */
+/* ------------------------------------------------------------------ */
+
+export const telegramLinks = sqliteTable('telegram_links', {
+  telegramUserId: text('telegram_user_id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .unique()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  telegramUsername: text('telegram_username'),
+  telegramFirstName: text('telegram_first_name'),
+  linkedAt: integer('linked_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  lastSeenAt: integer('last_seen_at', { mode: 'timestamp' }),
+})
+
+export const telegramLinkTokens = sqliteTable(
+  'telegram_link_tokens',
+  {
+    tokenHash: text('token_hash').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+    createdAt: createdAt(),
+    usedAt: integer('used_at', { mode: 'timestamp' }),
+  },
+  (t) => [index('telegram_link_tokens_user_idx').on(t.userId)],
+)
+
+export const telegramSessions = sqliteTable('telegram_sessions', {
+  telegramUserId: text('telegram_user_id').primaryKey(),
+  chatId: text('chat_id').notNull(),
+  activeMessageId: integer('active_message_id'),
+  stateJson: text('state_json').notNull(),
+  version: integer('version').notNull().default(0),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+})
+
+export const telegramUpdates = sqliteTable(
+  'telegram_updates',
+  {
+    updateId: integer('update_id').primaryKey(),
+    status: text('status').notNull().default('processing'),
+    claimedAt: integer('claimed_at', { mode: 'timestamp' }).notNull(),
+  },
+  (t) => [index('telegram_updates_claimed_idx').on(t.claimedAt)],
+)

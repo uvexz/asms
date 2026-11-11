@@ -9,6 +9,7 @@ import { Input } from '@/components/base/input/input'
 import { AlertDialog } from '@/components/base/modal/modal'
 import { toast } from '@/components/base/toast/toast'
 import { PageHeader } from '@/components/app/page-header'
+import { TelegramLink } from '@/components/app/settings/telegram-link'
 import { authClient } from '@/lib/auth-client'
 import { authErrorMessage } from '@/lib/auth-errors'
 import { providerLabel } from '@/lib/oauth-providers'
@@ -16,6 +17,7 @@ import {
   linkedAccountsQuery,
   publicConfigQuery,
   queryKeys,
+  telegramLinkQuery,
 } from '@/lib/queries'
 import { headTitle } from '@/lib/site'
 import { useSignOut } from '@/lib/use-sign-out'
@@ -31,7 +33,10 @@ export const Route = createFileRoute('/app/settings')({
   // Warm the query cache during the render pass, so the section below paints
   // with data and the same rows are not fetched a second time on mount.
   loader: ({ context }) =>
-    context.queryClient.ensureQueryData(linkedAccountsQuery()),
+    Promise.all([
+      context.queryClient.ensureQueryData(linkedAccountsQuery()),
+      context.queryClient.ensureQueryData(telegramLinkQuery()),
+    ]),
   component: SettingsPage,
 })
 
@@ -149,6 +154,8 @@ function SettingsPage() {
       </section>
 
       <ThirdPartyAccounts />
+
+      <TelegramLink />
 
       {emailPasswordEnabled ? (
         <section className="flex flex-col gap-5 rounded-3xl border border-border-button-default bg-background-primary-default p-6">
