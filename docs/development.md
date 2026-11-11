@@ -32,5 +32,4 @@ bun run bot:poll     # 本地 Bot 长轮询（无需 webhook）
 bun run bot:webhook  # set / info / delete Telegram webhook
 bun run bot:widget   # 校验 widget.html 体积与外部资源
 bun run bot:preview  # 浏览器预览 Widget
-bun run bot:test     # Bot 纯逻辑单测
 ```

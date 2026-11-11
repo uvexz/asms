@@ -1,5 +1,4 @@
 import type { SVGProps } from "react";
-import { cx } from "@/utils/cx";
 
 /**
  * Custom chevron glyphs drawn as vectors in the Board UI Figma file (they are
@@ -25,20 +24,6 @@ export function ChevronDownSmall(props: IconProps) {
   );
 }
 
-/** 12×12 rounded 1.5px-stroke chevron. Breadcrumb separator. */
-export function ChevronRightSmall({ className, ...props }: IconProps) {
-  return (
-    <svg viewBox="0 0 12 12" fill="none" aria-hidden {...props} className={cx("rtl:rotate-180", className)}>
-      <path
-        d="M4.5 3L7.14645 5.64645C7.34171 5.84171 7.34171 6.15829 7.14645 6.35355L4.5 9"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
 /** 16×16 stacked up/down chevrons. Workspace / account switchers. */
 export function ChevronUpDownSmall(props: IconProps) {
   return (
@@ -57,18 +42,6 @@ export function ChevronUpDownSmall(props: IconProps) {
           strokeLinecap="round"
         />
       </g>
-    </svg>
-  );
-}
-
-/** 24×24 filled rounded triangle chevron. Table column sort indicator. */
-export function ChevronSortDown(props: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden {...props}>
-      <path
-        d="M12.7071 15.2929C12.3166 15.6834 11.6834 15.6834 11.2929 15.2929L7.70711 11.7071C7.07714 11.0771 7.52331 10 8.41421 10H15.5858C16.4767 10 16.9229 11.0771 16.2929 11.7071L12.7071 15.2929Z"
-        fill="currentColor"
-      />
     </svg>
   );
 }

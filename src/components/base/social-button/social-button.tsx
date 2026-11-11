@@ -252,5 +252,3 @@ export function SocialButton({ href, ...props }: SocialButtonProps | SocialButto
     </button>
   );
 }
-
-export { SOCIAL_PROVIDERS, type SocialProvider };

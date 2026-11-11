@@ -239,15 +239,6 @@ export async function markMessage(
   await db.update(messages).set(patch).where(eq(messages.id, messageId))
 }
 
-export async function markAllRead(userId: string, mailboxId: string) {
-  await enforceRateLimit(RATE_LIMITS.messageMutate, userId)
-  await assertMailboxOwner(userId, mailboxId)
-  await db
-    .update(messages)
-    .set({ isRead: true })
-    .where(eq(messages.mailboxId, mailboxId))
-}
-
 export async function deleteMessage(userId: string, messageId: string) {
   await enforceRateLimit(RATE_LIMITS.messageMutate, userId)
   const row = await db

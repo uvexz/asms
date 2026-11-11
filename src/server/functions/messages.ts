@@ -6,7 +6,6 @@ import {
   deleteMessage,
   getMessage,
   listMessages,
-  markAllRead,
   markMessage,
 } from '../services/messages'
 
@@ -43,15 +42,6 @@ export const markMessageFn = createServerFn({ method: 'POST' })
         isRead: data.isRead,
         isStarred: data.isStarred,
       })
-      return { updated: true }
-    }),
-  )
-
-export const markAllReadFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ mailboxId: z.string().max(128) }))
-  .handler(async ({ data }) =>
-    asUser(async ({ user }) => {
-      await markAllRead(user.id, data.mailboxId)
       return { updated: true }
     }),
   )

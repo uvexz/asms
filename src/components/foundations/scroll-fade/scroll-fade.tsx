@@ -23,7 +23,7 @@ import { cx } from "@/utils/cx";
  */
 
 /** Scroll distance, in px, over which the fade ramps from 0 to 1. */
-export const SCROLL_FADE_DISTANCE = 24;
+const SCROLL_FADE_DISTANCE = 24;
 
 export function useScrollFade(distance = SCROLL_FADE_DISTANCE) {
   const [progress, setProgress] = useState(0);

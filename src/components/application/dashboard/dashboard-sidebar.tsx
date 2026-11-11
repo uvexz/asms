@@ -1,7 +1,6 @@
 "use client";
 
 import { useRouter } from "@tanstack/react-router";
-import { useTemplateCopy } from "@/components/foundations/template-copy/template-copy";
 
 import { useState, type ComponentType, type ReactNode } from "react";
 import { RiCloseLine, RiSideBarFill } from "@remixicon/react";
@@ -37,8 +36,7 @@ type IconComponent = ComponentType<{
  * place — only these label/badge slots animate — so nothing jumps to center.
  */
 function Collapsible({ collapsed, children, className }: { collapsed: boolean; children: ReactNode; className?: string }) {
-  const localize = useTemplateCopy();
-  return localize((
+  return (
     <span
       className={cx(
         "flex min-w-0 items-center overflow-hidden transition-[max-width,opacity,filter] duration-300 ease-in-out",
@@ -50,7 +48,7 @@ function Collapsible({ collapsed, children, className }: { collapsed: boolean; c
     >
       {children}
     </span>
-  ));
+  );
 }
 
 function NavItem({
@@ -71,9 +69,8 @@ function NavItem({
   /** Action rows (e.g. Settings → modal) intercept the navigation. */
   onClick?: () => void;
 }) {
-  const localize = useTemplateCopy();
   const router = useRouter();
-  return localize((
+  return (
     <a
       href={href}
       onClick={(event) => {
@@ -126,7 +123,7 @@ function NavItem({
       </span>
       {badge && <Collapsible collapsed={collapsed}>{badge}</Collapsible>}
     </a>
-  ));
+  );
 }
 
 /** A primary navigation row. Rows without an `href` are decoration only. */
@@ -216,12 +213,11 @@ export function DashboardSidebar({
   onSignOut?: () => void;
   onAdmin?: () => void;
 }) {
-  const localize = useTemplateCopy();
   const [collapsedState, setCollapsed] = useState(false);
   const [suppressUserHover, setSuppressUserHover] = useState(false);
   const collapsed = mobile ? false : collapsedState;
 
-  return localize((
+  return (
     <aside
       className={cx(
         "flex h-full shrink-0 flex-col justify-between overflow-hidden",
@@ -328,5 +324,5 @@ export function DashboardSidebar({
           ))}
       </div>
     </aside>
-  ));
+  );
 }

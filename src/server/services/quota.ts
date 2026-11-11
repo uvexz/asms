@@ -5,7 +5,7 @@ import { sendQuota } from '#/db/schema'
 import { AppError } from '../result'
 import { getSetting } from '../settings'
 
-export function quotaDateFor(timeZone: string, date = new Date()): string {
+function quotaDateFor(timeZone: string, date = new Date()): string {
   try {
     return new Intl.DateTimeFormat('en-CA', {
       timeZone,

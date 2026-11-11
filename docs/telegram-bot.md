@@ -23,4 +23,4 @@
 5. 生产：部署后执行 `bun run bot:webhook set`；`info` / `delete` 用于排障。
 6. Web 端 `/app/settings` 连接 Telegram，打开深链并发送 `/start`。
 
-辅助命令：`bun run bot:widget`（体积 / 外部资源检查）、`bun run bot:preview`（浏览器预览 Widget）、`bun run bot:test`（纯逻辑单测）。
+辅助命令：`bun run bot:widget`（体积 / 外部资源检查）、`bun run bot:preview`（浏览器预览 Widget）。

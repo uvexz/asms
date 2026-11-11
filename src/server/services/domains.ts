@@ -123,7 +123,7 @@ export async function listDomains() {
 const PUBLIC_DOMAIN_TTL_MS = 60_000
 let publicDomainCache: { names: string[]; expiresAt: number } | null = null
 
-export function invalidatePublicDomains() {
+function invalidatePublicDomains() {
   publicDomainCache = null
 }
 

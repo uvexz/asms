@@ -1,7 +1,5 @@
 "use client";
 
-import { useTemplateCopy } from "@/components/foundations/template-copy/template-copy";
-
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
 import { RiMoonLine, RiSunLine } from "@remixicon/react";
@@ -11,8 +9,8 @@ import { cx } from "@/utils/cx";
 
 export type ThemeMode = "light" | "dark";
 
-export const THEME_STORAGE_KEY = "boardui:theme";
-export const THEME_CHANGE_EVENT = "boardui:theme-change";
+const THEME_STORAGE_KEY = "boardui:theme";
+const THEME_CHANGE_EVENT = "boardui:theme-change";
 
 const THEME_TRANSITION_DURATION = 820;
 const THEME_TRANSITION_EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
@@ -95,7 +93,7 @@ function storedTheme(): ThemeMode {
   }
 }
 
-export function applyTheme(theme: ThemeMode, { persist = true }: { persist?: boolean } = {}) {
+function applyTheme(theme: ThemeMode, { persist = true }: { persist?: boolean } = {}) {
   if (typeof document === "undefined") return;
   document.documentElement.classList.toggle("dark", theme === "dark");
   if (persist) {
@@ -134,7 +132,7 @@ function normalizedOrigin(
  * API. Keyboard activation starts at the control's center. Unsupported
  * browsers and reduced-motion users receive the same immediate theme change.
  */
-export async function applyThemeWithTransition(
+async function applyThemeWithTransition(
   theme: ThemeMode,
   {
     origin = null,
@@ -230,7 +228,6 @@ export function ThemeToggle({
   size = "medium",
   transitionDuration = THEME_TRANSITION_DURATION,
 }: ThemeToggleProps) {
-  const localize = useTemplateCopy();
   const theme = useThemeMode();
   const dark = theme === "dark";
   const switchRef = useRef<HTMLLabelElement | null>(null);
@@ -255,7 +252,7 @@ export function ThemeToggle({
       { mode: "dark" as const, label: "深色模式", Icon: RiMoonLine },
     ];
 
-    return localize((
+    return (
       <div
         role="group"
         aria-label="主题"
@@ -335,12 +332,12 @@ export function ThemeToggle({
           );
         })}
       </div>
-    ));
+    );
   }
 
   if (collapsed) {
     const Icon = dark ? RiSunLine : RiMoonLine;
-    return localize((
+    return (
       <button
         type="button"
         aria-label={dark ? "切换到浅色模式" : "切换到深色模式"}
@@ -367,10 +364,10 @@ export function ThemeToggle({
       >
         <Icon className="size-5" aria-hidden />
       </button>
-    ));
+    );
   }
 
-  return localize((
+  return (
     <AriaSwitch
       ref={switchRef}
       isSelected={dark}
@@ -406,5 +403,5 @@ export function ThemeToggle({
         </>
       )}
     </AriaSwitch>
-  ));
+  );
 }

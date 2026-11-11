@@ -5,7 +5,7 @@ export type SiteBranding = {
   footerText: string
 }
 
-export const DEFAULT_BRANDING: SiteBranding = {
+const DEFAULT_BRANDING: SiteBranding = {
   siteName: 'asms',
   siteDescription: '自托管邮件服务',
   logoUrl: '',

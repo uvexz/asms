@@ -26,7 +26,7 @@ import {
   FakeMailService,
   makeMailbox,
   makeMessage,
-} from '#/server/telegram/test-fixtures'
+} from '#/server/telegram/preview-fixtures'
 import type {
   BodyPage,
   TelegramSessionState,

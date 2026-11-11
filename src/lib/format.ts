@@ -1,4 +1,4 @@
-export function formatDateTime(value: string | Date): string {
+function formatDateTime(value: string | Date): string {
   const date = typeof value === 'string' ? new Date(value) : value
   return new Intl.DateTimeFormat('zh-CN', {
     month: '2-digit',

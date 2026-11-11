@@ -52,12 +52,6 @@ export function isOidcProvider(id: string): id is OidcProviderId {
   return (OIDC_PROVIDER_IDS as readonly string[]).includes(id)
 }
 
-export function isBuiltinProvider(
-  id: string,
-): id is (typeof BUILTIN_PROVIDERS)[number] {
-  return (BUILTIN_PROVIDERS as readonly string[]).includes(id)
-}
-
 /** A brand we ship a glyph for, as opposed to a plain OIDC provider. */
 export function isBrandProvider(id: string): id is SocialProvider {
   return id in SOCIAL_PROVIDERS
