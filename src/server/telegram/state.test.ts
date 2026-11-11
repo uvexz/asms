@@ -84,29 +84,54 @@ test('renderBodyPages linkifies https and www but not http', () => {
   assert.equal(html.includes('<a href="http://'), false)
 })
 
-test('renderBodyPages makes verification codes copyable', () => {
-  const english = renderBodyPages(
-    'Your verification code is 482913.',
-    420,
-    700,
-  ).join('')
-  assert.ok(english.includes('Your verification code is <code>482913</code>.'))
-  const chinese = renderBodyPages('验证码：A1B2C3', 420, 700).join('')
-  assert.ok(chinese.includes('<code>A1B2C3</code>'))
-  const colon = renderBodyPages('Your code is: 482913.', 420, 700).join('')
-  assert.ok(colon.includes('<code>482913</code>'))
-  const chineseColon = renderBodyPages('验证码是：482913', 420, 700).join('')
-  assert.ok(chineseColon.includes('<code>482913</code>'))
+test('renderBodyPages marks four-digit numbers and mixed tokens as codes', () => {
+  const longNumber = renderBodyPages('Order 98765 shipped.', 420, 700).join('')
+  assert.ok(longNumber.includes('<code>98765</code>'))
+
+  const fourDigits = renderBodyPages('Ticket 1234.', 420, 700).join('')
+  assert.ok(fourDigits.includes('<code>1234</code>'))
+
+  const threeDigits = renderBodyPages('Ticket 123.', 420, 700).join('')
+  assert.equal(threeDigits.includes('<code>'), false)
+
+  const mixed = renderBodyPages('Reference AB12CD.', 420, 700).join('')
+  assert.ok(mixed.includes('<code>AB12CD</code>'))
+
+  const fourMixed = renderBodyPages('Seat AB12.', 420, 700).join('')
+  assert.ok(fourMixed.includes('<code>AB12</code>'))
+
   const prefixed = renderBodyPages('Your code is G-123456.', 420, 700).join('')
   assert.ok(prefixed.includes('<code>G-123456</code>'))
-  const plain = renderBodyPages('Order 482913 has shipped.', 420, 700).join('')
-  assert.equal(plain.includes('<code>'), false)
+
+  const letters = renderBodyPages('Build ABCDEF.', 420, 700).join('')
+  assert.equal(letters.includes('<code>'), false)
+
+  const shortMixed = renderBodyPages('Seat A1.', 420, 700).join('')
+  assert.equal(shortMixed.includes('<code>'), false)
+
+  const email = renderBodyPages('user12345@example.com', 420, 700).join('')
+  assert.equal(email.includes('<code>'), false)
+
   const url = renderBodyPages(
     'Your code is at https://example.com/code/482913',
     420,
     700,
   ).join('')
+  assert.ok(url.includes('<a href="https://example.com/code/482913">'))
   assert.equal(url.includes('<code>'), false)
+})
+
+test('renderBodyPages marks every matching token', () => {
+  const html = renderBodyPages('1234 12345 AB12 A1B2C 98765', 420, 700).join('')
+  assert.equal((html.match(/<code>/g) ?? []).length, 5)
+})
+
+test('renderBodyPages keeps long codes copyable', () => {
+  const html = renderBodyPages('Code 1234567890 and A1B2C3D4E5', 420, 700).join(
+    '',
+  )
+  assert.ok(html.includes('<code>1234567890</code>'))
+  assert.ok(html.includes('<code>A1B2C3D4E5</code>'))
 })
 
 test('renderBodyPages escapes text and never emits mail html', () => {

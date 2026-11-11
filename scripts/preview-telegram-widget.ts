@@ -95,7 +95,7 @@ async function reset() {
       subject: 'Verify your email',
       textBody: '',
       htmlBody:
-        '<p>Hello,</p><p>Your verification code is <b>482913</b>.</p><p><a href="https://example.com/verify?token=abc123&amp;user=1">Verify your email</a></p>',
+        '<p>Hello,</p><p>Your verification code is <b>482913</b>, backup A1B2C3.</p><p>Reference 1234, order 98765.</p><p><a href="https://example.com/verify?token=abc123&amp;user=1">Verify your email</a></p>',
     },
     {
       fromName: 'Long Link',

@@ -356,7 +356,6 @@ function findCut(page: string): number {
 }
 
 const BODY_HTML_LIMIT = 960
-const CODE_MARK_LIMIT = 4
 
 type BodyMark = {
   start: number
@@ -368,8 +367,8 @@ type BodyMark = {
 const LINK_PATTERN =
   /(^|[^\w@])((?:https?:\/\/|www\.)[^\s<>"'`“”‘’，。；：！？、…（）【】《》「」『』]+)/gi
 
-const CODE_PATTERN =
-  /(?:验证码|校验码|动态码|确认码|激活码|登录码|安全码|\bverification\s+code\b|\byour\s+code\b|\bcode\b|\bone[-\s]?time\s+(?:password|code)\b|\bsecurity\s+code\b|\blogin\s+code\b|\bsign[-\s]?in\s+code\b|\botp\b|\bpin\b)\s*(?:(?:is|为|是)\s*)?[:=：]?\s*((?:[A-Z]-)?[A-Z0-9]{4,8})\b/gi
+const CODE_TOKEN_PATTERN =
+  /\b(?:(?=[A-Z0-9_-]*[A-Z])(?=[A-Z0-9_-]*\d)[A-Z0-9][A-Z0-9_-]{2,}[A-Z0-9]|\d{4,})\b/gi
 
 const BRACKET_PAIRS: Array<[string, string]> = [
   [')', '('],
@@ -419,6 +418,7 @@ function normalizeLink(value: string): string | null {
 
 function findBodyMarks(value: string): BodyMark[] {
   const marks: BodyMark[] = []
+  const linkMarks: BodyMark[] = []
   const links = new RegExp(LINK_PATTERN.source, LINK_PATTERN.flags)
   let match: RegExpExecArray | null
 
@@ -429,20 +429,29 @@ function findBodyMarks(value: string): BodyMark[] {
     if (!visible) continue
     const href = normalizeLink(visible)
     if (!href) continue
-    marks.push({ start, end: start + visible.length, kind: 'link', href })
+    const mark: BodyMark = {
+      start,
+      end: start + visible.length,
+      kind: 'link',
+      href,
+    }
+    marks.push(mark)
+    linkMarks.push(mark)
     links.lastIndex = start + visible.length
   }
 
-  const codes = new RegExp(CODE_PATTERN.source, CODE_PATTERN.flags)
-  let count = 0
-  while (count < CODE_MARK_LIMIT && (match = codes.exec(value))) {
-    const code = match[1] ?? ''
-    if (!code || !/\d/.test(code)) continue
-    const start = match.index + match[0].length - code.length
-    const end = start + code.length
-    if (marks.some((mark) => start < mark.end && end > mark.start)) continue
+  const tokens = new RegExp(CODE_TOKEN_PATTERN.source, CODE_TOKEN_PATTERN.flags)
+  let linkAt = 0
+  while ((match = tokens.exec(value))) {
+    const start = match.index
+    const end = start + match[0].length
+    if (value[start - 1] === '@' || value[end] === '@') continue
+    if (value[start - 1] === '.' && value[end] === '.') continue
+    while (linkAt < linkMarks.length && linkMarks[linkAt].end <= start) {
+      linkAt += 1
+    }
+    if (linkAt < linkMarks.length && linkMarks[linkAt].start < end) continue
     marks.push({ start, end, kind: 'code' })
-    count += 1
   }
 
   marks.sort((a, b) => a.start - b.start)
@@ -535,9 +544,10 @@ function renderRange(
 
 /**
  * Renders plain mail text as safe widget HTML pages: https links become
- * anchors, detected verification codes become tappable <code> elements, and
- * pages never split either. The visible text keeps the char/byte budgets and
- * the rendered HTML stays under the widget answer limit.
+ * anchors, long numbers and digit-letter tokens become copyable <code>
+ * elements, and pages never split either. The visible text keeps the
+ * char/byte budgets and the rendered HTML stays under the widget answer
+ * limit.
  */
 export function renderBodyPages(
   value: string,
