@@ -380,7 +380,7 @@ function AdminSettingsPage() {
                 placeholder="no-reply@mail.example.com"
                 value={text('resend.systemFromAddress')}
                 onChange={(v) => set('resend.systemFromAddress', v)}
-                hint="用于找回密码等系统邮件"
+                hint="用于找回密码与注册验证；配置后新注册账号需先验证邮箱"
               />
             </div>
             <div className="rounded-2xl bg-background-secondary-default p-4 text-caption-1-regular text-text-secondary">

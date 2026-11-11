@@ -5,7 +5,7 @@
 - **框架**：TanStack Start（React 19 + Nitro）
 - **UI**：BoardUI（Tailwind v4，组件按 registry 原样安装）
 - **数据库**：libSQL（本地 SQLite 文件 / Turso 线上）
-- **认证**：Better Auth（邮箱密码 + Google/GitHub/sb.sb OIDC + admin 插件）
+- **认证**：Better Auth（邮箱密码 + 邮箱验证 + Google/GitHub/sb.sb OIDC + admin 插件）
 - **邮件**：Resend 收发，S3 兼容存储保存附件（可选）
 
 ## 功能
@@ -17,6 +17,7 @@
 - 收件箱：列表 + 正文 + 附件，HTML 在 sandbox iframe 中渲染，默认拦截远程图片。
 - 写邮件：纯文本自动生成 HTML，每日额度由管理员配置（默认 5 封）。
 - 已发送：查看 Resend 投递状态（送达 / 退信 / 投诉等）。
+- 注册验证：配置 Resend API Key 与系统发件地址后，邮箱密码注册会收到验证链接；未验证账号登录或进入面板时跳转到 `/verify-email`，可重发邮件。管理员账号不受此限制。
 - 个人设置：昵称、密码、第三方账号绑定 / 解绑、退出登录。
 
 ### 管理面板 `/admin`
@@ -67,7 +68,7 @@ bun run dev
 打开 <http://localhost:3000>：
 
 1. 注册第一个账号。
-2. 访问 `/setup` 领取管理员权限（若设置了 `SETUP_TOKEN`，需要输入该口令）。
+2. 访问 `/setup` 领取管理员权限（若设置了 `SETUP_TOKEN`，需要输入该口令）；领取后该账号会同时标记为邮箱已验证。
 3. 在 `/admin/settings` 填入 Resend API Key 与 Webhook Secret。
 4. 在 `/admin/domains` 添加域名并按提示配置 DNS。
 
@@ -107,7 +108,9 @@ Resend Dashboard → Webhooks → 添加：
 
 ### 4. 系统发件
 
-“找回密码”等功能需要发件地址。请在 Resend 验证过的域名下配置一个地址（如 `no-reply@mail.example.com`），填入管理面板 → Resend → 系统发件地址。
+“找回密码”与“注册验证”需要发件地址。请在 Resend 验证过的域名下配置一个地址（如 `no-reply@mail.example.com`），填入管理面板 → Resend → 系统发件地址。
+
+API Key 与系统发件地址都配置后，邮箱密码注册会自动发送验证链接；新账号未验证时，登录后会被引导到 `/verify-email` 重发或等待验证。领取 `/setup` 管理员权限的账号会自动标记为已验证，管理员也不受验证拦截，避免配置错误时锁死后台。
 
 ### 5. 附件存储（可选）
 
@@ -196,6 +199,7 @@ turso db tokens create asms
 | 认证入口总计              | IP            | 300 / 分钟                    |
 | 邮箱密码登录              | IP / 账号     | 20 / 10 分钟、10 / 15 分钟    |
 | 注册                      | IP            | 10 / 小时                     |
+| 重发验证邮件              | IP / 账号     | 5 / 15 分钟、3 / 小时         |
 | 找回密码                  | IP / 账号     | 5 / 15 分钟、3 / 小时         |
 | 重置密码 / 修改密码       | IP            | 10 / 15 分钟                  |
 | 修改邮箱 / 删除账号       | IP            | 10 / 小时、5 / 小时           |

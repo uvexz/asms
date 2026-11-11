@@ -29,7 +29,12 @@ export const Route = createFileRoute('/register')({
   head: headTitle('创建账号'),
   loader: async () => fetchPublicConfig(),
   beforeLoad: ({ context }) => {
-    if (context.session) throw redirect({ to: '/app' })
+    if (!context.session) return
+    const needsVerification =
+      context.emailVerificationRequired &&
+      context.session.user.role !== 'admin' &&
+      !context.session.user.emailVerified
+    throw redirect({ to: needsVerification ? '/verify-email' : '/app' })
   },
   component: RegisterPage,
 })
@@ -77,10 +82,11 @@ function RegisterPage() {
 
     setErrors({})
     setPending(true)
-    const { error } = await authClient.signUp.email({
+    const { data, error } = await authClient.signUp.email({
       name: trimmedName,
       email: trimmedEmail,
       password,
+      callbackURL: `${window.location.origin}/verify-email?verified=1`,
     })
     setPending(false)
 
@@ -91,7 +97,18 @@ function RegisterPage() {
 
     await router.invalidate()
     const status = await fetchSetupStatus()
-    await router.navigate({ to: status.needsSetup ? '/setup' : '/app' })
+    if (status.needsSetup) {
+      await router.navigate({ to: '/setup' })
+      return
+    }
+    if (
+      config.emailVerificationRequired &&
+      data?.user.emailVerified === false
+    ) {
+      await router.navigate({ to: '/verify-email' })
+      return
+    }
+    await router.navigate({ to: '/app' })
   }
 
   const brand = (

@@ -5,6 +5,7 @@ import { AuthShell } from '@/components/application/auth/auth-shell'
 import { Button, ButtonLink } from '@/components/base/buttons/button'
 import { Input } from '@/components/base/input/input'
 import { toast } from '@/components/base/toast/toast'
+import { authClient } from '@/lib/auth-client'
 import { headTitle } from '@/lib/site'
 import { claimAdmin, fetchSetupStatus } from '@/server/functions/auth'
 
@@ -47,6 +48,9 @@ function SetupPage() {
     }
 
     toast.success('初始化完成', { description: '你已成为管理员' })
+    // The claim changed role and verification behind a cached session cookie;
+    // re-read it so the admin gates see the new values on the first try.
+    await authClient.getSession({ query: { disableCookieCache: true } })
     await router.invalidate()
     await router.navigate({ to: '/admin' })
   }

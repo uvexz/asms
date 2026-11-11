@@ -1,9 +1,9 @@
+import { EMAIL_PATTERN } from '#/lib/email'
+
 import { AppError } from '../result'
 import { getSetting } from '../settings'
 import { enqueueResend, getResend } from '../integrations/resend'
 import { sanitizeDisplayName } from './mailboxes'
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export async function sendSystemMail(input: {
   to: string
@@ -21,7 +21,7 @@ export async function sendSystemMail(input: {
   if (!apiKey) {
     throw new AppError('RESEND_NOT_CONFIGURED', '尚未配置 Resend API Key')
   }
-  if (!fromAddress || !EMAIL_RE.test(fromAddress)) {
+  if (!fromAddress || !EMAIL_PATTERN.test(fromAddress)) {
     throw new AppError('SYSTEM_SENDER_NOT_CONFIGURED', '系统发件地址不合法')
   }
 

@@ -21,7 +21,7 @@ import { decryptSecret } from '#/server/crypto'
 import { assertRuntimeEnv } from '#/server/env'
 import { configuredIpHeaders, configuredTrustedProxies } from '#/server/ip'
 import { sendSystemMail } from '#/server/services/system-mail'
-import { getSetting } from '#/server/settings'
+import { getSetting, getSiteConfig } from '#/server/settings'
 
 type ProviderRow = typeof schema.oauthProviders.$inferSelect
 type SocialProviders = Record<
@@ -161,6 +161,7 @@ function createAuth(
   providers: Providers,
   emailPasswordEnabled: boolean,
   appName: string,
+  emailVerificationRequired: boolean,
 ) {
   const baseURL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3000'
   const ipAddressHeaders = configuredIpHeaders()
@@ -216,8 +217,36 @@ function createAuth(
         trustedProviders: providers.ids,
       },
     },
+    ...(emailVerificationRequired
+      ? {
+          emailVerification: {
+            sendOnSignUp: true,
+            expiresIn: 60 * 60,
+            sendVerificationEmail: async ({ user, url }) => {
+              try {
+                await sendSystemMail({
+                  to: user.email,
+                  subject: '验证你的邮箱',
+                  text: `请打开以下链接完成邮箱验证（1 小时内有效）：\n${url}\n\n如果不是你本人的操作，请忽略这封邮件。`,
+                  html: `<p>请打开以下链接完成邮箱验证（1 小时内有效）：</p><p><a href="${url}">${url}</a></p><p>如果不是你本人的操作，请忽略这封邮件。</p>`,
+                })
+              } catch (error) {
+                // Without this, the raw error becomes an empty 500 and the
+                // resend action can only say "something went wrong".
+                console.error('[asms] failed to send verification email', error)
+                throw new APIError('INTERNAL_SERVER_ERROR', {
+                  message: '验证邮件发送失败，请稍后重试或联系管理员',
+                })
+              }
+            },
+          },
+        }
+      : {}),
     emailAndPassword: {
       enabled: emailPasswordEnabled,
+      // Verification is enforced when entering the app, not at sign-in: the
+      // first account has to keep its session so it can claim /setup, and that
+      // claim is what marks its address verified.
       requireEmailVerification: false,
       minPasswordLength: 8,
       sendResetPassword: async ({ user, url }) => {
@@ -289,17 +318,32 @@ async function loadProviders(): Promise<Providers> {
  */
 export async function getAuth(): Promise<AuthInstance> {
   assertRuntimeEnv()
-  const [providers, enabled, appName] = await Promise.all([
+  const [providers, site] = await Promise.all([
     loadProviders(),
-    getSetting('auth.emailPasswordEnabled'),
-    getSetting('site.name'),
+    getSiteConfig(),
   ])
-  const key = JSON.stringify({ providers, enabled, appName })
+  const enabled = site.emailPasswordEnabled
+  const appName = site.siteName
+  const emailVerificationRequired = site.emailVerificationRequired
+  const key = JSON.stringify({
+    providers,
+    enabled,
+    appName,
+    emailVerificationRequired,
+  })
 
   const next =
     cached && cached.key === key
       ? cached
-      : { key, auth: createAuth(providers, enabled, appName) }
+      : {
+          key,
+          auth: createAuth(
+            providers,
+            enabled,
+            appName,
+            emailVerificationRequired,
+          ),
+        }
 
   cached = next
   return next.auth

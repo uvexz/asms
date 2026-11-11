@@ -34,6 +34,7 @@ export const fetchShell = createServerFn({ method: 'GET' }).handler(
               id: session.user.id,
               name: session.user.name,
               email: session.user.email,
+              emailVerified: session.user.emailVerified,
               image: session.user.image ?? null,
               role: (session.user as { role?: string }).role ?? 'user',
             },
@@ -45,6 +46,7 @@ export const fetchShell = createServerFn({ method: 'GET' }).handler(
         logoUrl: site.logoUrl,
         footerText: site.footerText,
       },
+      emailVerificationRequired: site.emailVerificationRequired,
     }
   },
 )
@@ -63,6 +65,7 @@ export const fetchPublicConfig = createServerFn({ method: 'GET' }).handler(
       footerText: site.footerText,
       registrationEnabled: site.registrationEnabled,
       emailPasswordEnabled: site.emailPasswordEnabled,
+      emailVerificationRequired: site.emailVerificationRequired,
       providers,
     }
   },
@@ -122,10 +125,12 @@ export const claimAdmin = createServerFn({ method: 'POST' })
       }
 
       // One statement makes "no admin yet" and the promotion atomic; two
-      // simultaneous claims can no longer both win the race.
+      // simultaneous claims can no longer both win the race. The claimer is
+      // the site owner, so the claim also settles their address — otherwise
+      // the first admin could be locked out by the verification gate.
       const promoted = await db
         .update(user)
-        .set({ role: 'admin', updatedAt: new Date() })
+        .set({ role: 'admin', emailVerified: true, updatedAt: new Date() })
         .where(
           sql`${user.id} = ${session.user.id} and (select count(*) from "user" where "role" = 'admin') = 0`,
         )

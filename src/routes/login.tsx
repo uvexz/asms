@@ -13,7 +13,12 @@ export const Route = createFileRoute('/login')({
   }),
   loader: async () => fetchPublicConfig(),
   beforeLoad: ({ context }) => {
-    if (context.session) throw redirect({ to: '/app' })
+    if (!context.session) return
+    const needsVerification =
+      context.emailVerificationRequired &&
+      context.session.user.role !== 'admin' &&
+      !context.session.user.emailVerified
+    throw redirect({ to: needsVerification ? '/verify-email' : '/app' })
   },
   component: LoginPage,
 })
@@ -44,6 +49,7 @@ function LoginPage() {
           providers={config.providers}
           registrationEnabled={config.registrationEnabled}
           emailPasswordEnabled={config.emailPasswordEnabled}
+          emailVerificationRequired={config.emailVerificationRequired}
           initialError={error ? authErrorMessage({ code: error }) : null}
         />
       </div>

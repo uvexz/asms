@@ -29,6 +29,13 @@ export const Route = createFileRoute('/app')({
     if (!context.session) {
       throw redirect({ to: '/login' })
     }
+    if (
+      context.emailVerificationRequired &&
+      context.session.user.role !== 'admin' &&
+      !context.session.user.emailVerified
+    ) {
+      throw redirect({ to: '/verify-email' })
+    }
   },
   component: AppLayout,
 })

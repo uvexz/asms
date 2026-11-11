@@ -105,7 +105,7 @@ function AdminOverview() {
     },
     {
       label: '配置系统发件地址',
-      hint: '找回密码等系统邮件会从这个地址发出',
+      hint: '找回密码与注册验证等系统邮件会从这个地址发出',
       done: overview.health.systemFrom,
       href: '/admin/settings',
     },

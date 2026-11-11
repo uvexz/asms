@@ -55,6 +55,8 @@ export interface LoginPanelProps {
   providers: string[]
   registrationEnabled: boolean
   emailPasswordEnabled: boolean
+  /** The site can deliver verification mail, so unverified accounts are held. */
+  emailVerificationRequired: boolean
   /** Message left behind by a failed OAuth round-trip, shown above the form. */
   initialError?: string | null
   /** `1` on `/login`, where the card is the page; `2` inside the hero. */
@@ -66,6 +68,7 @@ export function LoginPanel({
   providers,
   registrationEnabled,
   emailPasswordEnabled,
+  emailVerificationRequired,
   initialError,
   headingLevel = 2,
   className,
@@ -124,12 +127,17 @@ export function LoginPanel({
 
     setStatus('success')
     const role = (data?.user as { role?: string } | undefined)?.role
+    const unverified =
+      emailVerificationRequired &&
+      role !== 'admin' &&
+      data?.user.emailVerified === false
     // Let the check land before the page changes under the pointer. The
     // session refresh comes after, so it never flashes the signed-in card
     // over a form the visitor is still looking at.
     await new Promise((resolve) => setTimeout(resolve, 420))
     await router.invalidate()
-    if (role === 'admin') await router.navigate({ to: '/admin' })
+    if (unverified) await router.navigate({ to: '/verify-email' })
+    else if (role === 'admin') await router.navigate({ to: '/admin' })
     else await router.navigate({ to: '/app' })
   }
 

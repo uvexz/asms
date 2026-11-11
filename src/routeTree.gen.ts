@@ -18,6 +18,7 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as SiteDotwebmanifestRouteImport } from './routes/site[.]webmanifest'
+import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminAuditRouteImport } from './routes/admin/audit'
 import { Route as AdminDomainsRouteImport } from './routes/admin/domains'
@@ -81,6 +82,11 @@ const SetupRoute = SetupRouteImport.update({
 const SiteDotwebmanifestRoute = SiteDotwebmanifestRouteImport.update({
   id: '/site.webmanifest',
   path: '/site.webmanifest',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyEmailRoute = VerifyEmailRouteImport.update({
+  id: '/verify-email',
+  path: '/verify-email',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
@@ -189,6 +195,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/setup': typeof SetupRoute
   '/site.webmanifest': typeof SiteDotwebmanifestRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/domains': typeof AdminDomainsRoute
   '/admin/ingest': typeof AdminIngestRoute
@@ -217,6 +224,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/setup': typeof SetupRoute
   '/site.webmanifest': typeof SiteDotwebmanifestRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/domains': typeof AdminDomainsRoute
   '/admin/ingest': typeof AdminIngestRoute
@@ -248,6 +256,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/setup': typeof SetupRoute
   '/site.webmanifest': typeof SiteDotwebmanifestRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/domains': typeof AdminDomainsRoute
   '/admin/ingest': typeof AdminIngestRoute
@@ -280,6 +289,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/setup'
     | '/site.webmanifest'
+    | '/verify-email'
     | '/admin/audit'
     | '/admin/domains'
     | '/admin/ingest'
@@ -308,6 +318,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/setup'
     | '/site.webmanifest'
+    | '/verify-email'
     | '/admin/audit'
     | '/admin/domains'
     | '/admin/ingest'
@@ -338,6 +349,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/setup'
     | '/site.webmanifest'
+    | '/verify-email'
     | '/admin/audit'
     | '/admin/domains'
     | '/admin/ingest'
@@ -369,6 +381,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SetupRoute: typeof SetupRoute
   SiteDotwebmanifestRoute: typeof SiteDotwebmanifestRoute
+  VerifyEmailRoute: typeof VerifyEmailRoute
   ApiAttachmentsIdRoute: typeof ApiAttachmentsIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiCronCleanupRoute: typeof ApiCronCleanupRoute
@@ -439,6 +452,13 @@ declare module '@tanstack/react-router' {
       path: '/site.webmanifest'
       fullPath: '/site.webmanifest'
       preLoaderRoute: typeof SiteDotwebmanifestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verify-email': {
+      id: '/verify-email'
+      path: '/verify-email'
+      fullPath: '/verify-email'
+      preLoaderRoute: typeof VerifyEmailRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/': {
@@ -631,6 +651,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SetupRoute: SetupRoute,
   SiteDotwebmanifestRoute: SiteDotwebmanifestRoute,
+  VerifyEmailRoute: VerifyEmailRoute,
   ApiAttachmentsIdRoute: ApiAttachmentsIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiCronCleanupRoute: ApiCronCleanupRoute,

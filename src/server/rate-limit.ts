@@ -76,6 +76,16 @@ export const RATE_LIMITS = {
     windowMs: 15 * MINUTE,
   },
   authSignUpIp: { scope: 'auth.sign-up.ip', limit: 10, windowMs: HOUR },
+  authVerificationEmailIp: {
+    scope: 'auth.verification-email.ip',
+    limit: 5,
+    windowMs: 15 * MINUTE,
+  },
+  authVerificationEmailAccount: {
+    scope: 'auth.verification-email.account',
+    limit: 3,
+    windowMs: HOUR,
+  },
   authPasswordResetIp: {
     scope: 'auth.password-reset.ip',
     limit: 5,

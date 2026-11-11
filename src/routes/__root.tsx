@@ -21,6 +21,7 @@ import type { QueryClient } from '@tanstack/react-query'
 export interface RouterContext {
   queryClient: QueryClient
   session: Awaited<ReturnType<typeof fetchShell>>['session']
+  emailVerificationRequired: boolean
 }
 
 export const Route = createRootRouteWithContext<RouterContext>()({
@@ -37,7 +38,11 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       context.queryClient.clear()
       context.queryClient.setQueryData(queryKeys.authUser, { id: userId })
     }
-    return { session: shell.session, site: shell.site }
+    return {
+      session: shell.session,
+      site: shell.site,
+      emailVerificationRequired: shell.emailVerificationRequired,
+    }
   },
   head: ({ matches }) => {
     const site = siteBranding(matches)

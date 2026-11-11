@@ -23,6 +23,10 @@ const RULES: Record<string, AuthRule> = {
     account: RATE_LIMITS.authSignInAccount,
   },
   '/sign-up/email': { ip: RATE_LIMITS.authSignUpIp },
+  '/send-verification-email': {
+    ip: RATE_LIMITS.authVerificationEmailIp,
+    account: RATE_LIMITS.authVerificationEmailAccount,
+  },
   '/request-password-reset': {
     ip: RATE_LIMITS.authPasswordResetIp,
     account: RATE_LIMITS.authPasswordResetAccount,

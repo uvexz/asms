@@ -59,6 +59,11 @@ function LandingPage() {
   const config = Route.useLoaderData()
   const { session } = Route.useRouteContext()
   const isAdmin = session?.user.role === 'admin'
+  const needsVerification =
+    Boolean(session) &&
+    session?.user.role !== 'admin' &&
+    config.emailVerificationRequired &&
+    !session?.user.emailVerified
 
   return (
     <main className="flex min-h-dvh flex-col bg-background-full">
@@ -109,11 +114,21 @@ function LandingPage() {
                   {session.user.email}
                 </p>
                 <ButtonLink
-                  href={isAdmin ? '/admin' : '/app'}
+                  href={
+                    needsVerification
+                      ? '/verify-email'
+                      : isAdmin
+                        ? '/admin'
+                        : '/app'
+                  }
                   className="mt-7 h-11 w-full"
                   trailingIcon={RiArrowRightLine}
                 >
-                  {isAdmin ? '进入管理后台' : '进入邮箱面板'}
+                  {needsVerification
+                    ? '验证邮箱'
+                    : isAdmin
+                      ? '进入管理后台'
+                      : '进入邮箱面板'}
                 </ButtonLink>
               </div>
             ) : (
@@ -121,6 +136,7 @@ function LandingPage() {
                 providers={config.providers}
                 registrationEnabled={config.registrationEnabled}
                 emailPasswordEnabled={config.emailPasswordEnabled}
+                emailVerificationRequired={config.emailVerificationRequired}
               />
             )}
           </div>

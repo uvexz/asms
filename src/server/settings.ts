@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { db } from '#/db'
 import { settings } from '#/db/schema'
+import { EMAIL_PATTERN } from '#/lib/email'
 import { decryptSecret, encryptSecret, maskSecret } from './crypto'
 
 /**
@@ -436,6 +437,8 @@ async function buildSiteConfig() {
     timezone,
     registrationEnabled,
     emailPasswordEnabled,
+    resendApiKey,
+    systemFromAddress,
   ] = await Promise.all([
     getSetting('site.name'),
     getSetting('site.description'),
@@ -444,7 +447,17 @@ async function buildSiteConfig() {
     getSetting('site.timezone'),
     getSetting('site.registrationEnabled'),
     getSetting('auth.emailPasswordEnabled'),
+    getSetting('resend.apiKey'),
+    getSetting('resend.systemFromAddress'),
   ])
+
+  // Verification is only usable when a mail can actually leave the site: a
+  // key without a sender would leave every new account locked at a page that
+  // cannot send the link.
+  const emailVerificationRequired = Boolean(
+    (resendApiKey || process.env.RESEND_API_KEY?.trim()) &&
+    EMAIL_PATTERN.test(systemFromAddress),
+  )
 
   return {
     siteName,
@@ -454,6 +467,7 @@ async function buildSiteConfig() {
     timezone,
     registrationEnabled,
     emailPasswordEnabled,
+    emailVerificationRequired,
   }
 }
 
