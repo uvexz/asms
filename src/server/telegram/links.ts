@@ -45,16 +45,18 @@ export async function getLink(
 
 export async function getLinkForUser(userId: string) {
   const row = await db
-    .select()
+    .select({ link: telegramLinks, banned: user.banned })
     .from(telegramLinks)
+    .innerJoin(user, eq(telegramLinks.userId, user.id))
     .where(eq(telegramLinks.userId, userId))
     .get()
   if (!row) return null
   return {
-    telegramUserId: row.telegramUserId,
-    username: row.telegramUsername,
-    firstName: row.telegramFirstName,
-    linkedAt: row.linkedAt.toISOString(),
+    telegramUserId: row.link.telegramUserId,
+    username: row.link.telegramUsername,
+    firstName: row.link.telegramFirstName,
+    linkedAt: row.link.linkedAt.toISOString(),
+    banned: Boolean(row.banned),
   }
 }
 

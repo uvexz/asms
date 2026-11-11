@@ -9,6 +9,7 @@ import {
   isS3Configured,
   uploadObject,
 } from '../integrations/storage'
+import { notifyTelegramNewMail } from '../telegram/notify'
 import {
   findMailboxByAddress,
   isExpired,
@@ -278,6 +279,11 @@ export async function ingestReceivedEmail(
 
   let stored = 0
   let skipped = 0
+  const newMessages: Array<{
+    userId: string
+    messageId: string
+    mailboxId: string
+  }> = []
 
   for (const match of matches) {
     if (alreadyStored.has(match.mailbox.id)) {
@@ -334,6 +340,11 @@ export async function ingestReceivedEmail(
       console.error('[asms] attachment persistence failed', error)
     }
 
+    newMessages.push({
+      userId: match.mailbox.userId,
+      messageId,
+      mailboxId: match.mailbox.id,
+    })
     stored += 1
   }
 
@@ -343,6 +354,13 @@ export async function ingestReceivedEmail(
     result: stored > 0 ? 'stored' : 'duplicate',
     detail: `stored=${stored} skipped=${skipped}`,
   })
+
+  const pushed = new Set<string>()
+  for (const item of newMessages) {
+    if (pushed.has(item.userId)) continue
+    pushed.add(item.userId)
+    await notifyTelegramNewMail(item)
+  }
 
   return { stored, skipped }
 }

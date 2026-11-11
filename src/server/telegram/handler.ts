@@ -11,6 +11,7 @@ import { getTelegramConfig } from './config'
 import { hashLinkToken, isLinkToken } from './link-token'
 import { consumeLinkToken, getLink, touchLink } from './links'
 import { realMailService } from './mail-service'
+import { sendWidgetAndStore } from './outbound'
 import { defaultWidgetView, ensureWidget } from './session'
 import {
   buildChatData,
@@ -27,14 +28,12 @@ import type {
   LinkRecord,
   TelegramConfig,
   TelegramMessage,
-  TelegramSessionState,
   TelegramUpdate,
   TelegramUser,
   TelegramWidgetQuery,
   WidgetAction,
   WidgetView,
 } from './types'
-import { assertWidgetHtml } from './widget'
 
 type Runtime = {
   config: TelegramConfig
@@ -251,7 +250,14 @@ async function sendNewWidget(
     timeZone: runtime.timeZone,
     background: true,
   })
-  await sendWidgetAndStore(runtime, loaded, chatId, widget, built.json)
+  await sendWidgetAndStore({
+    api: runtime.api,
+    widgetHtml: runtime.widgetHtml,
+    loaded,
+    chatId,
+    widget,
+    json: built.json,
+  })
 }
 
 async function createAndSend(
@@ -292,55 +298,14 @@ async function createAndSend(
     timeZone: runtime.timeZone,
     background: true,
   })
-  await sendWidgetAndStore(runtime, loaded, chatId, widget, built.json)
-}
-
-async function sendWidgetAndStore(
-  runtime: Runtime,
-  loaded: LoadedSession,
-  chatId: number,
-  widget: WidgetView,
-  json: string,
-) {
-  assertWidgetHtml(runtime.widgetHtml)
-  const sent = await runtime.api.sendWidget({
-    chat_id: chatId,
-    html: runtime.widgetHtml,
-    chat_data: json,
-    allow_queries: true,
+  await sendWidgetAndStore({
+    api: runtime.api,
+    widgetHtml: runtime.widgetHtml,
+    loaded,
+    chatId,
+    widget,
+    json: built.json,
   })
-
-  const messageId = sent.message_id
-  const stored = ensureWidget(loaded.state, messageId, Date.now())
-  Object.assign(stored, widget)
-  stored.lastChatData = json
-  stored.updatedAt = Date.now()
-  loaded.activeMessageId = messageId
-
-  let current = loaded
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const version = await saveSession({
-      telegramUserId: current.telegramUserId,
-      chatId: String(chatId),
-      activeMessageId: messageId,
-      state: current.state,
-      expectedVersion: current.version,
-    })
-    if (version !== null) return
-
-    const fresh = await loadSession(current.telegramUserId, String(chatId))
-    mergeRefs(fresh.state, current.state)
-    const freshWidget = ensureWidget(fresh.state, messageId, Date.now())
-    Object.assign(
-      freshWidget,
-      current.state.widgets[String(messageId)] ?? widget,
-    )
-    freshWidget.lastChatData = json
-    fresh.state.activeMailboxId = current.state.activeMailboxId
-    fresh.activeMessageId = messageId
-    current = fresh
-  }
-  console.error('[asms] telegram new widget session could not be persisted')
 }
 
 type MutationInput = {
@@ -634,15 +599,6 @@ async function loadContext(
   }
 
   return { mailboxes, active, inbox, inboxPage, open }
-}
-
-function mergeRefs(target: TelegramSessionState, source: TelegramSessionState) {
-  for (const [ref, item] of Object.entries(source.refs.items)) {
-    if (!target.refs.items[ref]) {
-      target.refs.items[ref] = { ...item }
-    }
-  }
-  target.refs.next = Math.max(target.refs.next, source.refs.next)
 }
 
 function bodyAnswer(body: BodyPage, seq: number) {
