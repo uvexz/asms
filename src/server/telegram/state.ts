@@ -27,6 +27,7 @@ export type BuildInput = {
   now: number
   timeZone: string
   background: boolean
+  widgetHeight: number
 }
 
 export type BuiltChatData = {
@@ -135,9 +136,13 @@ function buildOnce(input: BuildInput, limits: Limits): ChatData {
   const activeRef = input.active
     ? allocRef(state, input.active.id, 'mailbox', now)
     : null
-  const base: Pick<ChatDataHome, 'v' | 's' | 'm' | 'a' | 'k' | 'e' | 'b'> = {
+  const base: Pick<
+    ChatDataHome,
+    'v' | 's' | 'h' | 'm' | 'a' | 'k' | 'e' | 'b'
+  > = {
     v: 1,
     s: widget.seq,
+    h: input.widgetHeight,
     m: activeRef,
     a: input.active?.address ?? null,
     k: input.active?.kind === 'permanent' ? 1 : 0,
@@ -194,6 +199,7 @@ function minimalData(input: BuildInput): ChatDataHome {
   return {
     v: 1,
     s: input.widget.seq,
+    h: input.widgetHeight,
     m: null,
     a: null,
     k: 0,

@@ -137,6 +137,7 @@ async function reset() {
     now,
     timeZone: 'Asia/Shanghai',
     background: true,
+    widgetHeight: 540,
   })
   widget.lastChatData = built.json
   initialChatData = built.json
@@ -292,6 +293,7 @@ async function handleRequest(data: string) {
         now,
         timeZone: 'Asia/Shanghai',
         background: true,
+        widgetHeight: 540,
       })
 
     let built = build()
