@@ -6,7 +6,12 @@ import {
 
 import { assertRuntimeEnv } from '#/server/env'
 import { clientIpFromHeaders } from '#/server/ip'
-import { consumeServerFnRateLimit, tooManyRequests } from '#/server/rate-limit'
+import {
+  RATE_LIMITS,
+  consumeRateLimit,
+  tooManyRequests,
+} from '#/server/rate-limit'
+import type { RateLimitRule } from '#/server/rate-limit'
 
 const envMiddleware = createMiddleware().server((ctx) => {
   // Request middleware bodies are server-only; this keeps production secret
@@ -20,13 +25,39 @@ const csrfMiddleware = createCsrfMiddleware({
   filter: (ctx) => ctx.handlerType === 'serverFn',
 })
 
-const rateLimitMiddleware = createMiddleware().server((ctx) => {
-  if (ctx.handlerType !== 'serverFn') return ctx.next()
-  const method = ctx.request.method.toUpperCase()
-  if (method === 'GET' || method === 'HEAD') return ctx.next()
+/**
+ * Auth has its own account-aware rules in `applyAuthRateLimit`. Everything
+ * else is classified by path here; page and asset requests stay unlimited so
+ * the limiter never gets between a browser and its static files.
+ */
+function routerRule(pathname: string): RateLimitRule | null {
+  if (!pathname.startsWith('/api/')) return null
+  if (pathname === '/api/auth' || pathname.startsWith('/api/auth/')) {
+    return null
+  }
+  if (pathname.startsWith('/api/webhooks/resend')) {
+    return RATE_LIMITS.webhookResendIp
+  }
+  if (pathname.startsWith('/api/telegram/webhook')) {
+    return RATE_LIMITS.webhookTelegramIp
+  }
+  if (pathname.startsWith('/api/cron/')) return RATE_LIMITS.cronIp
+  if (pathname.startsWith('/api/attachments/')) {
+    return RATE_LIMITS.attachmentIp
+  }
+  return RATE_LIMITS.apiIp
+}
+
+const rateLimitMiddleware = createMiddleware().server(async (ctx) => {
+  const pathname = new URL(ctx.request.url).pathname
+  const rule =
+    ctx.handlerType === 'serverFn'
+      ? RATE_LIMITS.serverFnIp
+      : routerRule(pathname)
+  if (!rule) return ctx.next()
 
   const ip = clientIpFromHeaders(ctx.request.headers) ?? 'unknown'
-  const result = consumeServerFnRateLimit(`serverFn:${ip}`)
+  const result = await consumeRateLimit(rule, ip)
   if (!result.allowed) return tooManyRequests(result.retryAfter)
   return ctx.next()
 })
@@ -49,8 +80,8 @@ export const startInstance = createStart(() => {
   return {
     requestMiddleware: [
       envMiddleware,
-      csrfMiddleware,
       rateLimitMiddleware,
+      csrfMiddleware,
       privateCacheMiddleware,
     ],
   }

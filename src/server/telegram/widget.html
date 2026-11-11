@@ -5,7 +5,7 @@
 var W=window.TelegramWidget,root=document.getElementById('w'),S=null,busy=false,err='',conf=null,B={},page=0,pending=null,ct=null;
 function el(t,c,x){var n=document.createElement(t);if(c)n.className=c;if(x!=null)n.textContent=x;return n}
 function btn(t,c,f,dis){var n=el('button','btn '+c,t);n.onclick=f;if(dis)n.disabled=true;return n}
-var ERRS={unlinked:'账户未连接，请先在网页设置中连接 Telegram',banned:'账户已被封禁',limit:'临时邮箱数量已达上限',taken:'该地址已被占用',invalid:'前缀格式不正确',expired:'邮箱已过期',gone:'内容已不存在，请刷新',permanent:'长期邮箱请在网页端删除',domain:'管理员尚未配置可用域名',busy:'操作太快，请稍候',internal:'操作失败，请重试'};
+var ERRS={unlinked:'账户未连接，请先在网页设置中连接 Telegram',banned:'账户已被封禁',taken:'该地址已被占用',invalid:'前缀格式不正确',expired:'邮箱已过期',gone:'内容已不存在，请刷新',permanent:'长期邮箱请在网页端删除',domain:'管理员尚未配置可用域名',busy:'操作太快，请稍候',internal:'操作失败，请重试'};
 function errT(c){return ERRS[c]||'操作失败，请重试'}
 function parse(){try{S=JSON.parse(W.chatData||'null')}catch(x){S=null}if(!S||S.v!==1)S=null}
 function k(){return S&&(S.e==='unlinked'||S.e==='banned')}

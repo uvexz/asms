@@ -48,8 +48,6 @@ const SITE_KEYS = [
 const MAIL_KEYS = [
   'mail.maxPermanentMailboxes',
   'mail.dailySendLimit',
-  'mail.tempTtlMinutes',
-  'mail.tempMaxLifetimeMinutes',
   'mail.permanentCooldownDays',
   'mail.retentionDays',
   'mail.minPrefixPermanent',
@@ -286,7 +284,7 @@ function AdminSettingsPage() {
         <TabPanel id="mail" className="pt-5">
           <SettingsCard
             title="邮件策略"
-            description="配额、临时邮箱有效期与地址规则。管理员不受配额限制。"
+            description="配额与地址规则。临时邮箱固定 1 小时有效，不设数量上限，创建受频率限制；管理员不受邮箱配额限制。"
             onSave={() => save.mutate(MAIL_KEYS)}
             pending={save.isPending}
             dirty={isDirty(MAIL_KEYS)}
@@ -306,16 +304,6 @@ function AdminSettingsPage() {
                 label="邮件保留天数（收件与已发送）"
                 value={num('mail.retentionDays')}
                 onChange={(v) => set('mail.retentionDays', Number(v))}
-              />
-              <NumberField
-                label="临时邮箱每次创建 / 续期时长（分钟）"
-                value={num('mail.tempTtlMinutes')}
-                onChange={(v) => set('mail.tempTtlMinutes', Number(v))}
-              />
-              <NumberField
-                label="临时邮箱总有效期上限（分钟）"
-                value={num('mail.tempMaxLifetimeMinutes')}
-                onChange={(v) => set('mail.tempMaxLifetimeMinutes', Number(v))}
               />
               <NumberField
                 label="长期地址冷却天数"

@@ -3,12 +3,10 @@ import { z } from 'zod'
 
 import { asUser } from '../session'
 import {
-  MAX_TEMP_MAILBOXES,
   createMailbox,
   deleteMailbox,
   domainsForUser,
   listMailboxes,
-  renewTempMailbox,
 } from '../services/mailboxes'
 import { getMailPolicy, getSetting } from '../settings'
 
@@ -33,11 +31,8 @@ export const fetchMailPolicyFn = createServerFn({ method: 'GET' }).handler(
         minPrefixPermanent: policy.minPrefixPermanent,
         minPrefixTemp: policy.minPrefixTemp,
         maxPrefixLength: policy.maxPrefixLength,
-        tempTtlMinutes: policy.tempTtlMinutes,
-        tempMaxLifetimeMinutes: policy.tempMaxLifetimeMinutes,
         permanentCooldownDays: policy.permanentCooldownDays,
         maxPermanentMailboxes: policy.maxPermanentMailboxes,
-        maxTempMailboxes: MAX_TEMP_MAILBOXES,
         dailySendLimit: policy.dailySendLimit,
         allowTempSending: policy.allowTempSending,
         timezone,
@@ -66,12 +61,6 @@ export const createMailboxFn = createServerFn({ method: 'POST' })
         displayName: data.displayName,
       }),
     ),
-  )
-
-export const renewMailboxFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ id: z.string().max(128) }))
-  .handler(async ({ data }) =>
-    asUser(({ user }) => renewTempMailbox(user.id, data.id)),
   )
 
 export const deleteMailboxFn = createServerFn({ method: 'POST' })

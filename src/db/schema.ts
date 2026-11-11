@@ -154,7 +154,6 @@ export const mailboxes = sqliteTable(
     kind: text('kind').notNull().default('permanent'),
     displayName: text('display_name'),
     expiresAt: integer('expires_at', { mode: 'timestamp' }),
-    renewCount: integer('renew_count').notNull().default(0),
     status: text('status').notNull().default('active'),
     lastReceivedAt: integer('last_received_at', { mode: 'timestamp' }),
     createdAt: createdAt(),
@@ -321,6 +320,27 @@ export const oauthProviders = sqliteTable('oauth_providers', {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })
+
+/* ------------------------------------------------------------------ */
+/* Rate limiting                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One fixed-window counter per scope + identity. Identities are HMAC'd, so
+ * the table never stores raw IPs, emails, or user ids. A row is reused across
+ * windows instead of appended, which bounds the table by distinct callers
+ * rather than by request volume.
+ */
+export const rateLimits = sqliteTable(
+  'rate_limits',
+  {
+    key: text('key').primaryKey(),
+    windowStart: integer('window_start').notNull(),
+    hits: integer('hits').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+  },
+  (t) => [index('rate_limits_expiry_idx').on(t.expiresAt)],
+)
 
 /* ------------------------------------------------------------------ */
 /* Observability                                                       */

@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { db } from '#/db'
 import { domains, sentEmails } from '#/db/schema'
 import { enqueueResend, getResend } from '../integrations/resend'
+import { RATE_LIMITS, enforceRateLimit } from '../rate-limit'
 import { AppError, assert } from '../result'
 import { getMailPolicy, getSetting } from '../settings'
 import { getMailboxForUser, sanitizeDisplayName } from './mailboxes'
@@ -90,6 +91,7 @@ export async function sendMail(input: {
   text: string
   requestId: string
 }): Promise<SentEmailDto> {
+  await enforceRateLimit(RATE_LIMITS.sendMail, input.userId)
   const { row: mailbox, mailbox: dto } = await getMailboxForUser(
     input.userId,
     input.mailboxId,

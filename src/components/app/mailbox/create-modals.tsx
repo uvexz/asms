@@ -13,6 +13,7 @@ import {
 import { Select, SelectItem } from '@/components/base/select/select'
 import { toast } from '@/components/base/toast/toast'
 import { formatDuration } from '@/lib/format'
+import { TEMP_MAILBOX_TTL_MINUTES } from '@/lib/temp-mailbox'
 import { domainsQuery, invalidateMailData } from '@/lib/queries'
 import { randomTempLocalPart } from '@/lib/temp-address'
 import { useMailPolicy } from '@/lib/use-mail-policy'
@@ -325,11 +326,7 @@ export function CreateTempMailboxModal({
         <>
           <ModalHeader
             title="创建临时邮箱"
-            description={
-              policy
-                ? `默认 ${formatDuration(policy.tempTtlMinutes)}后过期；到期后从列表隐藏，由定时任务清理。`
-                : '到期后从列表隐藏，由定时任务清理。'
-            }
+            description={`有效期 ${formatDuration(TEMP_MAILBOX_TTL_MINUTES)}；期内收到邮件即保留，否则到期失效。`}
           />
           <ModalBody className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
@@ -366,11 +363,6 @@ export function CreateTempMailboxModal({
               onRetry={() => void allDomains.refetch()}
               emptyHint="当前没有开放临时邮箱的域名，请联系管理员。"
             />
-            {policy && !policy.isAdmin ? (
-              <p className="text-caption-1-regular text-text-tertiary">
-                同时最多保留 {policy.maxTempMailboxes} 个临时邮箱。
-              </p>
-            ) : null}
           </ModalBody>
           <ModalFooter>
             <Button variant="secondary" onClick={close}>

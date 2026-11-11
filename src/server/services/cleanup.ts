@@ -1,4 +1,4 @@
-import { and, eq, inArray, lt, lte, ne, or } from 'drizzle-orm'
+import { and, eq, inArray, isNull, lt, lte, ne, or } from 'drizzle-orm'
 
 import { db } from '#/db'
 import {
@@ -8,6 +8,7 @@ import {
   ingestEvents,
   mailboxes,
   messages,
+  rateLimits,
   sentEmails,
   session,
   verification,
@@ -84,7 +85,12 @@ export async function runCleanup() {
       .select({ id: mailboxes.id })
       .from(mailboxes)
       .where(
-        and(eq(mailboxes.kind, 'temporary'), lte(mailboxes.expiresAt, now)),
+        and(
+          eq(mailboxes.kind, 'temporary'),
+          lte(mailboxes.expiresAt, now),
+          // A mailbox that received mail during its validity window is kept.
+          isNull(mailboxes.lastReceivedAt),
+        ),
       )
       .limit(MAILBOX_BATCH)
 
@@ -163,6 +169,11 @@ export async function runCleanup() {
     .where(lt(verification.expiresAt, now))
     .returning({ id: verification.id })
 
+  const limits = await db
+    .delete(rateLimits)
+    .where(lt(rateLimits.expiresAt, now.getTime()))
+    .returning({ key: rateLimits.key })
+
   return {
     messages: deletedMessages,
     mailboxes: deletedMailboxes,
@@ -172,6 +183,7 @@ export async function runCleanup() {
     sentEmails: sent.length,
     sessions: sessions.length,
     verifications: verifications.length,
+    rateLimits: limits.length,
     objects: canStore ? keys.size : 0,
     truncated,
     ranAt: new Date().toISOString(),

@@ -124,14 +124,6 @@ export const SETTING_DEFS = {
     group: 'mail',
     schema: z.number().int().min(0).max(100000).default(5),
   },
-  'mail.tempTtlMinutes': {
-    group: 'mail',
-    schema: z.number().int().min(5).max(1440).default(60),
-  },
-  'mail.tempMaxLifetimeMinutes': {
-    group: 'mail',
-    schema: z.number().int().min(5).max(10080).default(1440),
-  },
   'mail.permanentCooldownDays': {
     group: 'mail',
     schema: z.number().int().min(0).max(3650).default(30),
@@ -391,8 +383,6 @@ async function buildMailPolicy() {
   const [
     maxPermanentMailboxes,
     dailySendLimit,
-    tempTtlMinutes,
-    tempMaxLifetimeMinutes,
     permanentCooldownDays,
     retentionDays,
     minPrefixPermanent,
@@ -403,8 +393,6 @@ async function buildMailPolicy() {
   ] = await Promise.all([
     getSetting('mail.maxPermanentMailboxes'),
     getSetting('mail.dailySendLimit'),
-    getSetting('mail.tempTtlMinutes'),
-    getSetting('mail.tempMaxLifetimeMinutes'),
     getSetting('mail.permanentCooldownDays'),
     getSetting('mail.retentionDays'),
     getSetting('mail.minPrefixPermanent'),
@@ -417,8 +405,6 @@ async function buildMailPolicy() {
   return {
     maxPermanentMailboxes,
     dailySendLimit,
-    tempTtlMinutes,
-    tempMaxLifetimeMinutes,
     permanentCooldownDays,
     retentionDays,
     minPrefixPermanent,

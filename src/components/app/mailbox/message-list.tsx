@@ -27,6 +27,7 @@ import {
 import { countdown, formatRelative } from '@/lib/format'
 import { cx } from '@/utils/cx'
 import { PanelHeader } from './panel-header'
+import { isRetainedTempMailbox } from './types'
 import type { MailboxSummary, MessageSummary } from './types'
 
 export function MessageList({
@@ -43,7 +44,6 @@ export function MessageList({
   onSelectMailbox,
   onSelectMessage,
   onRefresh,
-  onRenew,
   onDeleteMailbox,
   onPageChange,
 }: {
@@ -60,7 +60,6 @@ export function MessageList({
   onSelectMailbox: (id: string | undefined) => void
   onSelectMessage: (id: string) => void
   onRefresh: () => void
-  onRenew: () => void
   onDeleteMailbox: (mailbox: MailboxSummary) => void
   onPageChange: (page: number) => void
 }) {
@@ -68,7 +67,11 @@ export function MessageList({
 
   const subtitle = mailbox
     ? [
-        mailbox.kind === 'temporary' ? countdown(mailbox.expiresAt) : null,
+        mailbox.kind === 'temporary'
+          ? isRetainedTempMailbox(mailbox)
+            ? '已保留'
+            : countdown(mailbox.expiresAt)
+          : null,
         total > 0 ? `共 ${total} 封` : '还没有收件',
       ]
         .filter(Boolean)
@@ -91,16 +94,6 @@ export function MessageList({
         subtitle={subtitle}
         actions={
           <>
-            {mailbox?.kind === 'temporary' ? (
-              <Button
-                size="xs"
-                variant="secondary"
-                leadingIcon={RiRefreshLine}
-                onClick={onRenew}
-              >
-                续期
-              </Button>
-            ) : null}
             {mailbox ? (
               <Dropdown>
                 <DropdownTrigger
@@ -110,11 +103,6 @@ export function MessageList({
                   <RiMore2Fill className="size-4" />
                 </DropdownTrigger>
                 <DropdownPopover aria-label="邮箱操作">
-                  {mailbox.kind === 'temporary' && mailbox.renewCount > 0 ? (
-                    <p className="px-2 pb-1 text-caption-1-regular text-text-tertiary">
-                      已续期 {mailbox.renewCount} 次
-                    </p>
-                  ) : null}
                   <DropdownItem
                     onSelect={async () => {
                       await navigator.clipboard.writeText(mailbox.address)

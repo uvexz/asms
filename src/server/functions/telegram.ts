@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 
 import { audit } from '#/server/services/audit'
+import { RATE_LIMITS, enforceRateLimit } from '#/server/rate-limit'
 import { AppError } from '#/server/result'
 import { getTelegramLinkConfig } from '#/server/telegram/config'
 import {
@@ -46,6 +47,8 @@ export const createTelegramLinkFn = createServerFn({
         '请先断开当前 Telegram 连接',
       )
     }
+
+    await enforceRateLimit(RATE_LIMITS.telegramLink, ctx.user.id)
 
     const { token, expiresAt } = await issueLinkToken(ctx.user.id)
     await audit({

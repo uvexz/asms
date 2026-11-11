@@ -193,10 +193,13 @@ function createAuth(
       // also bounds how long a banned or demoted user stays stale.
       cookieCache: { enabled: true, maxAge: 30 },
     },
+    // Every `/api/auth/*` request is gated by applyAuthRateLimit before it
+    // reaches this handler. That limiter keys password flows by IP *and*
+    // account and stores counters in the database, so it covers multiple
+    // instances and distributed attacks. Better Auth's own limiter would add
+    // a second, per-process bucket for the same requests.
     rateLimit: {
-      enabled: true,
-      window: 10,
-      max: 100,
+      enabled: false,
     },
     account: {
       accountLinking: {

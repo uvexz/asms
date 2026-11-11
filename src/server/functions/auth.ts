@@ -6,8 +6,9 @@ import { z } from 'zod'
 import { db } from '#/db'
 import { user } from '#/db/schema'
 import { getEnabledProviderIds, resetAuthCache } from '#/lib/auth'
+import { RATE_LIMITS, enforceRateLimit } from '../rate-limit'
 import { assert, run } from '../result'
-import { getSession, requireUser } from '../session'
+import { getSession, requestIp, requireUser } from '../session'
 import { publicDomainNames } from '../services/domains'
 import { getSiteConfig } from '../settings'
 import { audit } from '../services/audit'
@@ -99,6 +100,12 @@ export const claimAdmin = createServerFn({ method: 'POST' })
   .handler(async ({ data }) =>
     run(async () => {
       const session = await requireUser()
+      // The setup token is the only secret at this point; count by IP so
+      // creating extra accounts does not reset the brute-force budget.
+      await enforceRateLimit(
+        RATE_LIMITS.setupClaim,
+        requestIp() ?? session.user.id,
+      )
 
       const expected = process.env.SETUP_TOKEN
       assert(

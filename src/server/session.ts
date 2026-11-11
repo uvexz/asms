@@ -2,6 +2,7 @@ import { getRequestHeaders } from '@tanstack/react-start/server'
 
 import { getAuth } from '#/lib/auth'
 import { clientIpFromHeaders } from './ip'
+import { RATE_LIMITS, enforceRateLimit } from './rate-limit'
 import { AppError, fail } from './result'
 import type { Result } from './result'
 
@@ -59,6 +60,7 @@ export async function asUser<T>(
 ): Promise<Result<T>> {
   try {
     const ctx = await requireUser()
+    await enforceRateLimit(RATE_LIMITS.userRequest, ctx.user.id)
     return { ok: true, data: await fn(ctx) }
   } catch (error) {
     return fail(error)
@@ -70,6 +72,7 @@ export async function asAdmin<T>(
 ): Promise<Result<T>> {
   try {
     const ctx = await requireAdmin()
+    await enforceRateLimit(RATE_LIMITS.adminRequest, ctx.user.id)
     return { ok: true, data: await fn(ctx) }
   } catch (error) {
     return fail(error)

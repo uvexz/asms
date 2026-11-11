@@ -7,7 +7,6 @@ export type MailboxSummary = {
   kind: MailboxKind
   displayName: string | null
   expiresAt: string | null
-  renewCount: number
   lastReceivedAt: string | null
   unread: number
 }
@@ -41,9 +40,19 @@ export type MessageDetailData = MessageSummary & {
   }>
 }
 
+/** A temporary mailbox that received mail while it was valid is kept
+ * indefinitely instead of expiring. */
+export function isRetainedTempMailbox(mailbox: {
+  kind: MailboxKind
+  lastReceivedAt: string | null
+}) {
+  return mailbox.kind === 'temporary' && Boolean(mailbox.lastReceivedAt)
+}
+
 /** A mailbox that has not expired yet, so it is still listed and readable. */
 export function isMailboxVisible(mailbox: MailboxSummary, now = Date.now()) {
   if (mailbox.kind !== 'temporary') return true
+  if (isRetainedTempMailbox(mailbox)) return true
   return Boolean(
     mailbox.expiresAt && new Date(mailbox.expiresAt).getTime() > now,
   )

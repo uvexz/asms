@@ -3,6 +3,7 @@ import { and, count, desc, eq, inArray } from 'drizzle-orm'
 import { db } from '#/db'
 import { attachments, domains, mailboxes, messages } from '#/db/schema'
 import { deleteObjects } from '../integrations/storage'
+import { RATE_LIMITS, enforceRateLimit } from '../rate-limit'
 import { assert } from '../result'
 import { formatAddress, isExpired } from './mailboxes'
 
@@ -82,6 +83,7 @@ async function resolveMailboxScope(
       id: mailboxes.id,
       kind: mailboxes.kind,
       expiresAt: mailboxes.expiresAt,
+      lastReceivedAt: mailboxes.lastReceivedAt,
     })
     .from(mailboxes)
     .where(and(eq(mailboxes.userId, userId), eq(mailboxes.status, 'active')))
@@ -224,6 +226,7 @@ export async function markMessage(
   messageId: string,
   patch: { isRead?: boolean; isStarred?: boolean },
 ) {
+  await enforceRateLimit(RATE_LIMITS.messageMutate, userId)
   const row = await db
     .select({ id: messages.id, mailbox: mailboxes })
     .from(messages)
@@ -237,6 +240,7 @@ export async function markMessage(
 }
 
 export async function markAllRead(userId: string, mailboxId: string) {
+  await enforceRateLimit(RATE_LIMITS.messageMutate, userId)
   await assertMailboxOwner(userId, mailboxId)
   await db
     .update(messages)
@@ -245,6 +249,7 @@ export async function markAllRead(userId: string, mailboxId: string) {
 }
 
 export async function deleteMessage(userId: string, messageId: string) {
+  await enforceRateLimit(RATE_LIMITS.messageMutate, userId)
   const row = await db
     .select({ id: messages.id, mailbox: mailboxes })
     .from(messages)

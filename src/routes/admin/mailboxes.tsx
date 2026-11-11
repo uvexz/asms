@@ -136,9 +136,11 @@ function AdminMailboxesPage() {
                       过期时间
                     </span>
                     <span className="text-caption-1-regular text-text-secondary">
-                      {item.expiresAt
-                        ? formatFullDateTime(item.expiresAt)
-                        : '长期'}
+                      {item.kind === 'temporary' && item.lastReceivedAt
+                        ? '已保留'
+                        : item.expiresAt
+                          ? formatFullDateTime(item.expiresAt)
+                          : '长期'}
                     </span>
                   </div>
                   <div className="flex flex-col gap-1">
@@ -200,9 +202,11 @@ function AdminMailboxesPage() {
                     </TableCell>
                     <TableCell>{item.ownerEmail}</TableCell>
                     <TableCell>
-                      {item.expiresAt
-                        ? formatFullDateTime(item.expiresAt)
-                        : '—'}
+                      {item.kind === 'temporary' && item.lastReceivedAt
+                        ? '已保留'
+                        : item.expiresAt
+                          ? formatFullDateTime(item.expiresAt)
+                          : '—'}
                     </TableCell>
                     <TableCell>
                       <span className="text-caption-1-regular text-text-tertiary">

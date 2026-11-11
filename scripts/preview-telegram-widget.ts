@@ -245,7 +245,7 @@ function previewError(error: unknown) {
       return 'permanent'
     }
     if (error.code === 'ADDRESS_TAKEN') return 'taken'
-    if (error.code === 'MAILBOX_LIMIT_REACHED') return 'limit'
+    if (error.code === 'RATE_LIMITED') return 'busy'
     if (error.code.startsWith('PREFIX_')) return 'invalid'
     if (
       error.code === 'REF_EXPIRED' ||

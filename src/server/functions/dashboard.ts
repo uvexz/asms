@@ -4,13 +4,13 @@ import { createServerFn } from '@tanstack/react-start'
 import { db } from '#/db'
 import { domains, mailboxes, messages } from '#/db/schema'
 import { asUser } from '../session'
+import { isExpired } from '../services/mailboxes'
 import { getSendUsage } from '../services/quota'
 import { getSetting } from '../settings'
 
 export const fetchOverview = createServerFn({ method: 'GET' }).handler(
   async () =>
     asUser(async ({ user }) => {
-      const now = new Date()
       const mailboxRows = await db
         .select({
           id: mailboxes.id,
@@ -18,6 +18,7 @@ export const fetchOverview = createServerFn({ method: 'GET' }).handler(
           localPart: mailboxes.localPart,
           domain: domains.name,
           expiresAt: mailboxes.expiresAt,
+          lastReceivedAt: mailboxes.lastReceivedAt,
         })
         .from(mailboxes)
         .innerJoin(domains, eq(mailboxes.domainId, domains.id))
@@ -25,11 +26,7 @@ export const fetchOverview = createServerFn({ method: 'GET' }).handler(
           and(eq(mailboxes.userId, user.id), eq(mailboxes.status, 'active')),
         )
 
-      const active = mailboxRows.filter(
-        (row) =>
-          row.kind === 'permanent' ||
-          (row.expiresAt && row.expiresAt.getTime() > now.getTime()),
-      )
+      const active = mailboxRows.filter((row) => !isExpired(row))
       const ids = active.map((row) => row.id)
 
       const [unreadRow, recentRows, timeZone] = await Promise.all([

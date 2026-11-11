@@ -1,4 +1,5 @@
 import { randomTempLocalPart } from '#/lib/temp-address'
+import { RATE_LIMITS, consumeRateLimit } from '#/server/rate-limit'
 import { AppError } from '#/server/result'
 import { audit } from '#/server/services/audit'
 import type { MailboxDto } from '#/server/services/mailboxes'
@@ -102,6 +103,16 @@ async function handleMessage(message: TelegramMessage, runtime: Runtime) {
   if (message.chat.type !== 'private') return
   const from = message.from
   if (!from || from.is_bot) return
+
+  const limit = await consumeRateLimit(
+    RATE_LIMITS.telegramAction,
+    String(from.id),
+  )
+  if (!limit.allowed) {
+    await sendText(runtime, message.chat.id, '操作太频繁，请稍后再试。')
+    return
+  }
+
   const text = message.text?.trim()
   if (!text) return
 
@@ -445,6 +456,15 @@ async function handleWidgetQuery(query: TelegramWidgetQuery, runtime: Runtime) {
     return
   }
 
+  const limit = await consumeRateLimit(
+    RATE_LIMITS.telegramAction,
+    String(query.from.id),
+  )
+  if (!limit.allowed) {
+    await answer(runtime, query, 'err:busy')
+    return
+  }
+
   const link = await getLink(String(query.from.id))
   if (!link) {
     await answerBlocked(runtime, query, 'unlinked')
@@ -624,8 +644,6 @@ function isMessageGone(error: unknown) {
 function mapError(error: unknown) {
   if (!(error instanceof AppError)) return 'internal'
   switch (error.code) {
-    case 'MAILBOX_LIMIT_REACHED':
-      return 'limit'
     case 'ADDRESS_TAKEN':
     case 'ADDRESS_COOLDOWN':
       return 'taken'
@@ -653,6 +671,7 @@ function mapError(error: unknown) {
     case 'ACCOUNT_BANNED':
       return 'banned'
     case 'BUSY':
+    case 'RATE_LIMITED':
       return 'busy'
     default:
       return 'internal'

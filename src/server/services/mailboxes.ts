@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gt, inArray, sql } from 'drizzle-orm'
+import { and, count, desc, eq, inArray } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 
 import { db } from '#/db'
@@ -9,15 +9,13 @@ import {
   mailboxes,
   messages,
 } from '#/db/schema'
+import { TEMP_MAILBOX_TTL_MINUTES } from '#/lib/temp-mailbox'
 import { deleteObjects } from '../integrations/storage'
+import { RATE_LIMITS, enforceRateLimit } from '../rate-limit'
 import { AppError, assert } from '../result'
 import { getMailPolicy } from '../settings'
 
 type MailboxRow = typeof mailboxes.$inferSelect
-
-/** Enough for one-off signups; stops an account from turning the rail into a
- * thousands-row `IN (...)` query and an unbounded storage sink. */
-export const MAX_TEMP_MAILBOXES = 20
 
 /** Display names go into an RFC 5322 `From` header, so control characters and
  * delimiters have to be removed before they reach Resend. */
@@ -44,7 +42,6 @@ export type MailboxDto = {
   displayName: string | null
   status: string
   expiresAt: string | null
-  renewCount: number
   lastReceivedAt: string | null
   unread: number
   createdAt: string
@@ -88,7 +85,6 @@ export function serializeMailbox(
     displayName: row.displayName,
     status: row.status,
     expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
-    renewCount: row.renewCount,
     lastReceivedAt: row.lastReceivedAt
       ? row.lastReceivedAt.toISOString()
       : null,
@@ -97,9 +93,16 @@ export function serializeMailbox(
   }
 }
 
-export function isExpired(row: { kind: string; expiresAt: Date | null }) {
+/** A temporary mailbox that received mail while it was valid is kept until
+ * the user deletes it; an untouched one expires at `expiresAt`. */
+export function isExpired(row: {
+  kind: string
+  expiresAt: Date | null
+  lastReceivedAt: Date | null
+}) {
   return (
     row.kind === 'temporary' &&
+    !row.lastReceivedAt &&
     (!row.expiresAt || row.expiresAt.getTime() <= Date.now())
   )
 }
@@ -267,39 +270,23 @@ export async function createMailbox(input: {
   const localPart = input.localPart.trim().toLowerCase()
   validateLocalPart(localPart, input.kind, policy)
 
+  await enforceRateLimit(
+    input.kind === 'temporary'
+      ? RATE_LIMITS.tempMailboxCreate
+      : RATE_LIMITS.permanentMailboxCreate,
+    input.userId,
+  )
+
   const domain = await findAvailableDomain(input.kind, input.domainId)
   const isAdmin = input.role === 'admin'
 
-  if (!isAdmin) {
-    if (input.kind === 'permanent') {
-      const used = await countPermanent(input.userId)
-      assert(
-        used < policy.maxPermanentMailboxes,
-        'MAILBOX_LIMIT_REACHED',
-        `长期邮箱数量已达上限（${policy.maxPermanentMailboxes} 个）`,
-      )
-    } else {
-      const activeTemp =
-        (
-          await db
-            .select({ value: count() })
-            .from(mailboxes)
-            .where(
-              and(
-                eq(mailboxes.userId, input.userId),
-                eq(mailboxes.kind, 'temporary'),
-                eq(mailboxes.status, 'active'),
-                gt(mailboxes.expiresAt, new Date()),
-              ),
-            )
-            .get()
-        )?.value ?? 0
-      assert(
-        activeTemp < MAX_TEMP_MAILBOXES,
-        'MAILBOX_LIMIT_REACHED',
-        `临时邮箱数量已达上限（${MAX_TEMP_MAILBOXES} 个）`,
-      )
-    }
+  if (!isAdmin && input.kind === 'permanent') {
+    const used = await countPermanent(input.userId)
+    assert(
+      used < policy.maxPermanentMailboxes,
+      'MAILBOX_LIMIT_REACHED',
+      `长期邮箱数量已达上限（${policy.maxPermanentMailboxes} 个）`,
+    )
   }
 
   const existing = await db
@@ -352,7 +339,7 @@ export async function createMailbox(input: {
   const now = new Date()
   const expiresAt =
     input.kind === 'temporary'
-      ? new Date(now.getTime() + policy.tempTtlMinutes * 60_000)
+      ? new Date(now.getTime() + TEMP_MAILBOX_TTL_MINUTES * 60_000)
       : null
 
   const row: MailboxRow = {
@@ -363,7 +350,6 @@ export async function createMailbox(input: {
     kind: input.kind,
     displayName: sanitizeDisplayName(input.displayName) || null,
     expiresAt,
-    renewCount: 0,
     status: 'active',
     lastReceivedAt: null,
     createdAt: now,
@@ -424,44 +410,6 @@ export async function getMailboxForUser(
   }
 }
 
-export async function renewTempMailbox(
-  userId: string,
-  mailboxId: string,
-): Promise<MailboxDto> {
-  const policy = await getMailPolicy()
-  const { mailbox, row } = await getMailboxForUser(userId, mailboxId)
-
-  assert(row.kind === 'temporary', 'NOT_TEMPORARY', '只有临时邮箱可以续期')
-  assert(row.expiresAt, 'MAILBOX_EXPIRED', '临时邮箱已过期')
-
-  const now = Date.now()
-  const maxLifetimeAt =
-    row.createdAt.getTime() + policy.tempMaxLifetimeMinutes * 60_000
-  const base = Math.max(now, row.expiresAt.getTime())
-  const nextExpiry = Math.min(
-    base + policy.tempTtlMinutes * 60_000,
-    maxLifetimeAt,
-  )
-
-  if (nextExpiry <= row.expiresAt.getTime()) {
-    throw new AppError(
-      'TEMP_LIFETIME_REACHED',
-      '已达到临时邮箱最长有效期，请重新创建',
-    )
-  }
-
-  await db
-    .update(mailboxes)
-    .set({
-      expiresAt: new Date(nextExpiry),
-      renewCount: sql`${mailboxes.renewCount} + 1`,
-      updatedAt: new Date(),
-    })
-    .where(eq(mailboxes.id, mailboxId))
-
-  return { ...mailbox, expiresAt: new Date(nextExpiry).toISOString() }
-}
-
 async function removeMailboxRow(row: MailboxRow): Promise<void> {
   const policy = await getMailPolicy()
 
@@ -492,6 +440,7 @@ export async function deleteMailbox(
   userId: string,
   mailboxId: string,
 ): Promise<void> {
+  await enforceRateLimit(RATE_LIMITS.mailboxDelete, userId)
   const { row } = await getMailboxForUser(userId, mailboxId)
   await removeMailboxRow(row)
 }

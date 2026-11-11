@@ -17,7 +17,6 @@ export function makeMailbox(overrides: Partial<MailboxDto> = {}): MailboxDto {
     status: overrides.status ?? 'active',
     expiresAt:
       overrides.expiresAt ?? new Date(Date.now() + 3_600_000).toISOString(),
-    renewCount: overrides.renewCount ?? 0,
     lastReceivedAt: overrides.lastReceivedAt ?? null,
     unread: overrides.unread ?? 0,
     createdAt: overrides.createdAt ?? new Date().toISOString(),

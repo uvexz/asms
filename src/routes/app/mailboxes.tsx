@@ -20,12 +20,14 @@ import { DomainNotice } from '@/components/app/mailbox/domain-notice'
 import { MailboxRail } from '@/components/app/mailbox/mailbox-rail'
 import { MessageDetail } from '@/components/app/mailbox/message-detail'
 import { MessageList } from '@/components/app/mailbox/message-list'
-import { isMailboxVisible } from '@/components/app/mailbox/types'
+import {
+  isMailboxVisible,
+  isRetainedTempMailbox,
+} from '@/components/app/mailbox/types'
 import type {
   MailboxKind,
   MailboxSummary,
 } from '@/components/app/mailbox/types'
-import { countdown, formatDuration } from '@/lib/format'
 import { useMailPolicy } from '@/lib/use-mail-policy'
 import {
   REFRESH_INTERVAL,
@@ -41,7 +43,7 @@ import type {
   MessagePage,
 } from '@/lib/queries'
 import { headTitle } from '@/lib/site'
-import { deleteMailboxFn, renewMailboxFn } from '@/server/functions/mailboxes'
+import { deleteMailboxFn } from '@/server/functions/mailboxes'
 import { deleteMessageFn, markMessageFn } from '@/server/functions/messages'
 import type { Result } from '@/server/result'
 import type { MailboxDto } from '@/server/services/mailboxes'
@@ -112,9 +114,11 @@ function MailboxesPage() {
     .filter((mailbox) => isMailboxVisible(mailbox, now))
     .sort((a, b) => {
       if (a.kind !== b.kind) return a.kind === 'permanent' ? -1 : 1
-      return a.kind === 'permanent'
-        ? a.address.localeCompare(b.address)
-        : (a.expiresAt ?? '').localeCompare(b.expiresAt ?? '')
+      if (a.kind === 'permanent') return a.address.localeCompare(b.address)
+      const aRetained = isRetainedTempMailbox(a)
+      const bRetained = isRetainedTempMailbox(b)
+      if (aRetained !== bRetained) return aRetained ? 1 : -1
+      return (a.expiresAt ?? '').localeCompare(b.expiresAt ?? '')
     })
   const selectedMailbox = active.find((mailbox) => mailbox.id === mailboxParam)
   const mailboxId = selectedMailbox?.id
@@ -210,18 +214,6 @@ function MailboxesPage() {
     },
   })
 
-  const renew = useMutation({
-    mutationFn: (id: string) => renewMailboxFn({ data: { id } }),
-    onSuccess: async (result) => {
-      if (!result.ok) {
-        toast.error('续期失败', { description: result.message })
-        return
-      }
-      toast.success('已续期', { description: countdown(result.data.expiresAt) })
-      await queryClient.invalidateQueries({ queryKey: queryKeys.mailboxes })
-    },
-  })
-
   const message = detail.data?.ok ? detail.data.data : null
   const items = list.data?.ok ? list.data.data.items : []
   const total = list.data?.ok ? list.data.data.total : 0
@@ -286,7 +278,7 @@ function MailboxesPage() {
   const header = (
     <PageHeader
       title="邮箱"
-      description="长期与临时邮箱统一收件；到期的临时邮箱会从列表隐藏，并由定时任务清理。"
+      description="长期与临时邮箱统一收件；临时邮箱在有效期内收到邮件即保留，否则到期失效。"
       actions={
         <>
           <Button
@@ -459,11 +451,7 @@ function MailboxesPage() {
         <MailboxRail
           mailboxes={active}
           selectedId={mailboxId}
-          renewLabel={
-            policy ? `续期 ${formatDuration(policy.tempTtlMinutes)}` : '续期'
-          }
           onSelect={selectMailbox}
-          onRenew={(id) => renew.mutate(id)}
           onDelete={setDeletingMailbox}
         />
         <MessageList
@@ -480,9 +468,6 @@ function MailboxesPage() {
           onSelectMailbox={selectMailbox}
           onSelectMessage={selectMessage}
           onRefresh={() => void list.refetch()}
-          onRenew={() => {
-            if (selectedMailbox) renew.mutate(selectedMailbox.id)
-          }}
           onDeleteMailbox={setDeletingMailbox}
           onPageChange={setPage}
         />

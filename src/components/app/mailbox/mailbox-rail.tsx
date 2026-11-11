@@ -4,7 +4,6 @@ import {
   RiFileCopyLine,
   RiInboxLine,
   RiMore2Fill,
-  RiRefreshLine,
 } from '@remixicon/react'
 
 import { Chip } from '@/components/base/badges/chip'
@@ -22,21 +21,18 @@ import {
 import { countdown, formatRelative } from '@/lib/format'
 import { cx } from '@/utils/cx'
 import { PanelHeader } from './panel-header'
+import { isRetainedTempMailbox } from './types'
 import type { MailboxSummary } from './types'
 
 export function MailboxRail({
   mailboxes,
   selectedId,
-  renewLabel,
   onSelect,
-  onRenew,
   onDelete,
 }: {
   mailboxes: MailboxSummary[]
   selectedId?: string
-  renewLabel: string
   onSelect: (id: string | undefined) => void
-  onRenew: (id: string) => void
   onDelete: (mailbox: MailboxSummary) => void
 }) {
   const fade = useScrollFade()
@@ -46,7 +42,12 @@ export function MailboxRail({
     .sort((a, b) => a.address.localeCompare(b.address))
   const temporary = mailboxes
     .filter((mailbox) => mailbox.kind === 'temporary')
-    .sort((a, b) => (a.expiresAt ?? '').localeCompare(b.expiresAt ?? ''))
+    .sort((a, b) => {
+      const aRetained = isRetainedTempMailbox(a)
+      const bRetained = isRetainedTempMailbox(b)
+      if (aRetained !== bRetained) return aRetained ? 1 : -1
+      return (a.expiresAt ?? '').localeCompare(b.expiresAt ?? '')
+    })
   const unread = mailboxes.reduce((sum, mailbox) => sum + mailbox.unread, 0)
 
   return (
@@ -100,9 +101,7 @@ export function MailboxRail({
               key={mailbox.id}
               mailbox={mailbox}
               active={mailbox.id === selectedId}
-              renewLabel={renewLabel}
               onSelect={() => onSelect(mailbox.id)}
-              onRenew={() => onRenew(mailbox.id)}
               onDelete={() => onDelete(mailbox)}
             />
           ))}
@@ -115,9 +114,7 @@ export function MailboxRail({
               key={mailbox.id}
               mailbox={mailbox}
               active={mailbox.id === selectedId}
-              renewLabel={renewLabel}
               onSelect={() => onSelect(mailbox.id)}
-              onRenew={() => onRenew(mailbox.id)}
               onDelete={() => onDelete(mailbox)}
             />
           ))}
@@ -139,21 +136,19 @@ function SectionLabel({ children }: { children: ReactNode }) {
 function MailboxRow({
   mailbox,
   active,
-  renewLabel,
   onSelect,
-  onRenew,
   onDelete,
 }: {
   mailbox: MailboxSummary
   active: boolean
-  renewLabel: string
   onSelect: () => void
-  onRenew: () => void
   onDelete: () => void
 }) {
   const temporary = mailbox.kind === 'temporary'
   const meta = temporary
-    ? countdown(mailbox.expiresAt)
+    ? isRetainedTempMailbox(mailbox)
+      ? '已保留'
+      : countdown(mailbox.expiresAt)
     : mailbox.lastReceivedAt
       ? `最后收件：${formatRelative(mailbox.lastReceivedAt)}`
       : '还没有收件'
@@ -219,12 +214,6 @@ function MailboxRow({
             <RiFileCopyLine className="size-4 text-foreground-icon-secondary" />
             <span>复制地址</span>
           </DropdownItem>
-          {temporary ? (
-            <DropdownItem onSelect={onRenew}>
-              <RiRefreshLine className="size-4 text-foreground-icon-secondary" />
-              <span>{renewLabel}</span>
-            </DropdownItem>
-          ) : null}
           <DropdownItem onSelect={onDelete}>
             <RiDeleteBin6Line className="size-4 text-text-error-primary" />
             <span className="text-text-error-primary">删除邮箱</span>

@@ -2,6 +2,11 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { enqueueResend, getResend } from '#/server/integrations/resend'
 import { getDownloadUrl } from '#/server/integrations/storage'
+import {
+  RATE_LIMITS,
+  consumeRateLimit,
+  tooManyRequests,
+} from '#/server/rate-limit'
 import { getAttachmentForUser } from '#/server/services/messages'
 import { getSession } from '#/server/session'
 
@@ -24,6 +29,14 @@ export const Route = createFileRoute('/api/attachments/$id')({
         }
         if ((session.user as { banned?: boolean }).banned) {
           return new Response('账号已被封禁，无法下载附件。', { status: 403 })
+        }
+
+        const limited = await consumeRateLimit(
+          RATE_LIMITS.attachmentDownload,
+          session.user.id,
+        )
+        if (!limited.allowed) {
+          return tooManyRequests(limited.retryAfter)
         }
 
         try {

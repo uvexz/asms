@@ -124,7 +124,7 @@ export function MessageDetail({
             <div className="p-4">
               <EmptyState
                 title="邮件不存在"
-                description="临时邮箱到期后，邮件会随邮箱一起清理。"
+                description="邮件可能已被删除，或随临时邮箱的保留期清理。"
               />
             </div>
           ) : (
