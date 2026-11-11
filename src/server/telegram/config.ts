@@ -41,7 +41,6 @@ export function getTelegramConfig(): TelegramConfig | null {
     webhookSecret,
     botUsername: botUsername(),
     baseUrl: baseUrl(),
-    widgetHeight: intEnv('TELEGRAM_WIDGET_HEIGHT', 540, 200, 600),
     bodyPageChars: intEnv('TELEGRAM_BODY_PAGE_CHARS', 420, 100, 800),
     bodyPageBytes: intEnv('TELEGRAM_BODY_PAGE_BYTES', 700, 100, 900),
   }

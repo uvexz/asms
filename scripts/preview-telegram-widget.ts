@@ -137,7 +137,6 @@ async function reset() {
     now,
     timeZone: 'Asia/Shanghai',
     background: true,
-    widgetHeight: 540,
   })
   widget.lastChatData = built.json
   initialChatData = built.json
@@ -293,8 +292,7 @@ async function handleRequest(data: string) {
         now,
         timeZone: 'Asia/Shanghai',
         background: true,
-        widgetHeight: 540,
-      })
+          })
 
     let built = build()
     const changed = built.json !== widget.lastChatData
@@ -357,7 +355,7 @@ function stubScript(theme: 'light' | 'dark', chatData: string) {
 function harnessHtml() {
   return `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>Telegram Widget Preview</title><style>
 *{box-sizing:border-box}body{margin:0;min-height:100vh;background:#eef0f3;color:#111;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;gap:18px;padding:28px}h1{margin:0;font-size:18px;font-weight:600}p{margin:0;color:#6b7280;font-size:13px}.bar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}.bar button{border:1px solid #d6d9de;background:#fff;border-radius:9px;padding:7px 12px;font:inherit;font-size:13px;cursor:pointer}.bar button.active{background:#111;border-color:#111;color:#fff}.frame{width:378px;max-width:100%;padding:9px;border-radius:24px;background:#fff;box-shadow:0 18px 50px rgba(15,23,42,.16),0 2px 8px rgba(15,23,42,.08)}iframe{display:block;width:360px;height:540px;max-width:100%;border:0;border-radius:18px;background:#fff}footer{font-size:12px;color:#8a919c}
-</style><body><h1>Telegram Widget Preview</h1><p>真实纯逻辑 + 本地 fake TelegramWidget。点击卡片内按钮；刷新会重置示例数据。</p><div class="bar"><button id="light" class="active" onclick="theme('light')">Light</button><button id="dark" onclick="theme('dark')">Dark</button><button onclick="reload()">重置</button></div><div class="frame"><iframe id="frame" src="/widget"></iframe></div><footer>360 × 540 · 15s 背景刷新 · 无内部滚动</footer><script>var f=document.getElementById('frame'),cur='light';function theme(t){cur=t;document.getElementById('light').className=t==='light'?'active':'';document.getElementById('dark').className=t==='dark'?'active':'';f.src='/widget?theme='+t}function reload(){f.src='/widget?theme='+cur}</script></body></html>`
+</style><body><h1>Telegram Widget Preview</h1><p>真实纯逻辑 + 本地 fake TelegramWidget。点击卡片内按钮；刷新会重置示例数据。</p><div class="bar"><button id="light" class="active" onclick="theme('light')">Light</button><button id="dark" onclick="theme('dark')">Dark</button><button onclick="reload()">重置</button></div><div class="frame"><iframe id="frame" src="/widget"></iframe></div><footer>360 × auto · 15s 背景刷新 · 无内部滚动</footer><script>var f=document.getElementById('frame'),cur='light';f.onload=function(){try{var d=f.contentDocument;var h=d&&d.body?d.body.scrollHeight:0;if(h)f.style.height=Math.max(420,h)+'px'}catch(e){}};function theme(t){cur=t;document.getElementById('light').className=t==='light'?'active':'';document.getElementById('dark').className=t==='dark'?'active':'';f.src='/widget?theme='+t}function reload(){f.src='/widget?theme='+cur}</script></body></html>`
 }
 
 function readBody(request: IncomingMessage): Promise<string> {

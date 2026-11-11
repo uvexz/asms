@@ -250,7 +250,6 @@ async function sendNewWidget(
     now: runtime.now,
     timeZone: runtime.timeZone,
     background: true,
-    widgetHeight: runtime.config.widgetHeight,
   })
   await sendWidgetAndStore(runtime, loaded, chatId, widget, built.json)
 }
@@ -292,7 +291,6 @@ async function createAndSend(
     now: runtime.now,
     timeZone: runtime.timeZone,
     background: true,
-    widgetHeight: runtime.config.widgetHeight,
   })
   await sendWidgetAndStore(runtime, loaded, chatId, widget, built.json)
 }
@@ -309,7 +307,6 @@ async function sendWidgetAndStore(
     chat_id: chatId,
     html: runtime.widgetHtml,
     chat_data: json,
-    height: runtime.config.widgetHeight,
     allow_queries: true,
   })
 
@@ -409,7 +406,6 @@ async function runWidgetMutation(
         now: runtime.now,
         timeZone: runtime.timeZone,
         background: true,
-        widgetHeight: runtime.config.widgetHeight,
       })
 
     let built = build()
@@ -746,7 +742,6 @@ async function answerBlocked(
     l: [],
     i: [],
     e: code,
-    h: runtime.config.widgetHeight,
     b: 1,
   }
   try {

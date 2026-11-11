@@ -46,7 +46,6 @@ export type TelegramConfig = {
   webhookSecret: string
   botUsername: string | null
   baseUrl: string
-  widgetHeight: number
   bodyPageChars: number
   bodyPageBytes: number
 }
@@ -88,7 +87,6 @@ export type TelegramSessionState = {
 export type ChatDataHome = {
   v: 1
   s: number
-  h: number
   m: string | null
   a: string | null
   k: 0 | 1
@@ -106,7 +104,6 @@ export type ChatDataHome = {
 export type ChatDataMail = {
   v: 1
   s: number
-  h: number
   m: string | null
   a: string | null
   k: 0 | 1

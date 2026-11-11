@@ -98,7 +98,6 @@ test('buildChatData maps UUIDs to short refs and stays <= 1024 bytes', () => {
     now,
     timeZone: 'UTC',
     background: true,
-    widgetHeight: 540,
   })
 
   assert.ok(built.bytes <= 1024, `state was ${built.bytes} bytes`)
@@ -115,7 +114,6 @@ test('buildChatData maps UUIDs to short refs and stays <= 1024 bytes', () => {
   assert.equal(data.lp, 1)
   assert.equal(data.z, 3)
   assert.equal(data.p, 0)
-  assert.equal(data.h, 540)
   assert.equal(data.a, mailboxes[0].address)
   assert.equal((data.l as unknown[]).length, 2)
   assert.equal((data.i as unknown[]).length, 4)
@@ -148,7 +146,6 @@ test('buildChatData for the mail view stays small and omits the inbox list', () 
     now,
     timeZone: 'UTC',
     background: true,
-    widgetHeight: 540,
   })
 
   assert.ok(built.bytes <= 1024)
@@ -189,7 +186,6 @@ test('buildChatData clamps extreme strings into the hard limit', () => {
     now,
     timeZone: 'UTC',
     background: true,
-    widgetHeight: 540,
   })
   assert.ok(built.bytes <= 1024, `state was ${built.bytes} bytes`)
 })

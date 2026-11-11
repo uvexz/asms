@@ -141,7 +141,6 @@ Resend Dashboard → Webhooks → 添加：
 | `TELEGRAM_BOT_USERNAME`        | Bot 启用 | 不带 `@`，用于生成 `t.me` 深链与设置页                                        |
 | `TELEGRAM_WEBHOOK_SECRET`      | Bot 启用 | `setWebhook` 的 secret_token；仅 `A-Za-z0-9_-`                                |
 | `TELEGRAM_WEBHOOK_URL`         | 否       | 默认 `<BETTER_AUTH_URL>/api/telegram/webhook`                                 |
-| `TELEGRAM_WIDGET_HEIGHT`       | 否       | Widget 高度，默认 540                                                         |
 | `TELEGRAM_BODY_PAGE_CHARS`     | 否       | 正文每页字符上限，默认 420                                                    |
 | `TELEGRAM_BODY_PAGE_BYTES`     | 否       | 正文每页 UTF-8 字节上限，默认 700                                             |
 | `PORT`                         | 否       | Node 服务端口，默认 3000                                                      |
