@@ -288,6 +288,44 @@ export function normalizeBody(value: string): string {
 export function htmlToText(value: string): string {
   let text = value.replace(/<!--[\s\S]*?-->/g, '')
   text = text.replace(/<(script|style|head)\b[\s\S]*?<\/\1>/gi, '')
+  const seenLinks = new Set<string>()
+  text = text.replace(
+    /<a\b([^>]*)>([\s\S]*?)<\/a>/gi,
+    (raw, attrs: string, inner: string) => {
+      const match = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(
+        attrs,
+      )
+      if (!match) return raw
+
+      const decoded = decodeEntities(
+        (match[1] ?? match[2] ?? match[3] ?? '').trim(),
+      )
+      const href = /^www\./i.test(decoded) ? `https://${decoded}` : decoded
+      if (!/^https?:\/\/[^\s<>"']+$/i.test(href) || href.length > 2048) {
+        return raw
+      }
+
+      const label = decodeEntities(
+        inner
+          .replace(/<[^>]*>/g, '')
+          .replace(/\s+/g, ' ')
+          .trim(),
+      )
+      if (!label) {
+        seenLinks.add(href)
+        return href
+      }
+      if (label.includes(href)) {
+        seenLinks.add(href)
+        return raw
+      }
+      if (/https?:\/\/|www\./i.test(label)) return raw
+      if (seenLinks.has(href)) return raw
+
+      seenLinks.add(href)
+      return `${raw} ${href}`
+    },
+  )
   text = text.replace(/<br\s*\/?>/gi, '\n')
   text = text.replace(/<hr\s*\/?>/gi, '\n\n')
   text = text.replace(/<li\b[^>]*>/gi, '• ')
@@ -317,46 +355,229 @@ function findCut(page: string): number {
   return cut >= min ? cut + 1 : -1
 }
 
+const BODY_HTML_LIMIT = 960
+const CODE_MARK_LIMIT = 4
+
+type BodyMark = {
+  start: number
+  end: number
+  kind: 'link' | 'code'
+  href?: string
+}
+
+const LINK_PATTERN =
+  /(^|[^\w@])((?:https?:\/\/|www\.)[^\s<>"'`“”‘’，。；：！？、…（）【】《》「」『』]+)/gi
+
+const CODE_PATTERN =
+  /(?:验证码|校验码|动态码|确认码|激活码|登录码|安全码|\bverification\s+code\b|\byour\s+code\b|\bcode\b|\bone[-\s]?time\s+(?:password|code)\b|\bsecurity\s+code\b|\blogin\s+code\b|\bsign[-\s]?in\s+code\b|\botp\b|\bpin\b)\s*(?:(?:is|为|是)\s*)?[:=：]?\s*((?:[A-Z]-)?[A-Z0-9]{4,8})\b/gi
+
+const BRACKET_PAIRS: Array<[string, string]> = [
+  [')', '('],
+  [']', '['],
+  ['}', '{'],
+  ['）', '（'],
+  ['】', '【'],
+  ['》', '《'],
+  ['」', '「'],
+  ['』', '『'],
+]
+
+function trimUrl(value: string): string {
+  let out = value.replace(/[.,;:!?'"”’，。；：！？、…]+$/u, '')
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const [close, open] of BRACKET_PAIRS) {
+      if (out.endsWith(close) && !out.includes(open)) {
+        out = out.slice(0, -1)
+        changed = true
+      }
+    }
+  }
+  return out
+}
+
+function normalizeLink(value: string): string | null {
+  let href = value
+  if (/^www\./i.test(href)) href = `https://${href}`
+  if (!/^https:\/\//i.test(href)) return null
+
+  let url: URL
+  try {
+    url = new URL(href)
+  } catch {
+    return null
+  }
+  if (url.protocol !== 'https:' || url.username || url.password) return null
+
+  const normalized = url.href
+  if (normalized.length > 256) return null
+  if (/%(?![0-9a-f]{2})/i.test(normalized)) return null
+  if (/["<>\\^`{|}]/.test(normalized)) return null
+  return normalized
+}
+
+function findBodyMarks(value: string): BodyMark[] {
+  const marks: BodyMark[] = []
+  const links = new RegExp(LINK_PATTERN.source, LINK_PATTERN.flags)
+  let match: RegExpExecArray | null
+
+  while ((match = links.exec(value))) {
+    const prefix = match[1] ?? ''
+    const start = match.index + prefix.length
+    const visible = trimUrl(match[2] ?? '')
+    if (!visible) continue
+    const href = normalizeLink(visible)
+    if (!href) continue
+    marks.push({ start, end: start + visible.length, kind: 'link', href })
+    links.lastIndex = start + visible.length
+  }
+
+  const codes = new RegExp(CODE_PATTERN.source, CODE_PATTERN.flags)
+  let count = 0
+  while (count < CODE_MARK_LIMIT && (match = codes.exec(value))) {
+    const code = match[1] ?? ''
+    if (!code || !/\d/.test(code)) continue
+    const start = match.index + match[0].length - code.length
+    const end = start + code.length
+    if (marks.some((mark) => start < mark.end && end > mark.start)) continue
+    marks.push({ start, end, kind: 'code' })
+    count += 1
+  }
+
+  marks.sort((a, b) => a.start - b.start)
+  return marks
+}
+
+function isLowSurrogate(code: number) {
+  return code >= 0xdc00 && code <= 0xdfff
+}
+
+function nextBoundary(value: string, index: number): number {
+  let next = Math.min(index, value.length)
+  while (next < value.length && isLowSurrogate(value.charCodeAt(next))) {
+    next += 1
+  }
+  return next
+}
+
+function prevBoundary(value: string, index: number): number {
+  let prev = Math.min(index, value.length)
+  while (prev > 0 && isLowSurrogate(value.charCodeAt(prev))) {
+    prev -= 1
+  }
+  return prev
+}
+
+function bodyPageEnd(
+  value: string,
+  start: number,
+  maxChars: number,
+  maxBytes: number,
+): number {
+  let index = start
+  let chars = 0
+  let bytes = 0
+  while (index < value.length) {
+    const code = value.codePointAt(index)
+    if (code === undefined) break
+    const char = String.fromCodePoint(code)
+    const size = Buffer.byteLength(char, 'utf8')
+    if (chars + 1 > maxChars || bytes + size > maxBytes) break
+    index += char.length
+    chars += 1
+    bytes += size
+  }
+  return index > start ? index : nextBoundary(value, start + 1)
+}
+
+function keepMarksWhole(marks: BodyMark[], start: number, end: number): number {
+  for (const mark of marks) {
+    if (mark.start < end && end < mark.end && mark.start > start) {
+      return mark.start
+    }
+  }
+  return end
+}
+
+function escapeText(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+function escapeAttr(value: string): string {
+  return escapeText(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
+
+function renderRange(
+  value: string,
+  marks: BodyMark[],
+  start: number,
+  end: number,
+): string {
+  let html = ''
+  let cursor = start
+  for (const mark of marks) {
+    if (mark.start < start || mark.end > end) continue
+    html += escapeText(value.slice(cursor, mark.start))
+    const visible = escapeText(value.slice(mark.start, mark.end))
+    html +=
+      mark.kind === 'link'
+        ? `<a href="${escapeAttr(mark.href ?? '')}">${visible}</a>`
+        : `<code>${visible}</code>`
+    cursor = mark.end
+  }
+  html += escapeText(value.slice(cursor, end))
+  return html
+}
+
 /**
- * Splits plain text into pages bounded by both UTF-16 character count and
- * UTF-8 bytes. Prefers a newline/space near the end of a page, never splits a
- * surrogate pair, and `pages.join('')` reconstructs the input.
+ * Renders plain mail text as safe widget HTML pages: https links become
+ * anchors, detected verification codes become tappable <code> elements, and
+ * pages never split either. The visible text keeps the char/byte budgets and
+ * the rendered HTML stays under the widget answer limit.
  */
-export function paginateBody(
+export function renderBodyPages(
   value: string,
   maxChars: number,
   maxBytes: number,
 ): string[] {
   if (!value) return ['']
+  const marks = findBodyMarks(value)
   const pages: string[] = []
-  let page = ''
-  let chars = 0
-  let bytes = 0
+  let start = 0
 
-  for (const char of value) {
-    const size = Buffer.byteLength(char, 'utf8')
-    if (page && (chars + 1 > maxChars || bytes + size > maxBytes)) {
-      const cut = findCut(page)
-      if (cut > 0) {
-        pages.push(page.slice(0, cut))
-        page = page.slice(cut)
-      } else {
-        pages.push(page)
-        page = ''
-      }
-      chars = [...page].length
-      bytes = Buffer.byteLength(page, 'utf8')
-      if (page && (chars + 1 > maxChars || bytes + size > maxBytes)) {
-        pages.push(page)
-        page = ''
-        chars = 0
-        bytes = 0
-      }
+  while (start < value.length) {
+    let end = bodyPageEnd(value, start, maxChars, maxBytes)
+    if (end < value.length) {
+      const cut = findCut(value.slice(start, end))
+      if (cut > 0) end = start + cut
     }
-    page += char
-    chars += 1
-    bytes += size
+    end = keepMarksWhole(marks, start, end)
+    if (end <= start) end = nextBoundary(value, start + 1)
+
+    let html = renderRange(value, marks, start, end)
+    while (
+      Buffer.byteLength(html, 'utf8') > BODY_HTML_LIMIT &&
+      end > start + 1
+    ) {
+      const target = Math.max(
+        start + 1,
+        start + Math.floor((end - start) * 0.8),
+      )
+      let next = prevBoundary(value, target)
+      next = keepMarksWhole(marks, start, next)
+      if (next <= start) next = nextBoundary(value, start + 1)
+      if (next >= end) next = prevBoundary(value, end - 1)
+      end = next
+      html = renderRange(value, marks, start, end)
+    }
+
+    pages.push(html)
+    start = end
   }
-  if (page) pages.push(page)
+
   return pages.length ? pages : ['']
 }

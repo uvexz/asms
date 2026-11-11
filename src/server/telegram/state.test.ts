@@ -13,7 +13,7 @@ import {
   clipBytes,
   formatTime,
   htmlToText,
-  paginateBody,
+  renderBodyPages,
 } from './state'
 import { makeMailbox, makeMessage, toListItem } from './test-fixtures'
 
@@ -43,16 +43,128 @@ test('clipBytes never splits a code point and respects the byte limit', () => {
   assert.equal(clipBytes('abcdef', 10), 'abcdef')
 })
 
-test('paginateBody reconstructs the text and respects both limits', () => {
+test('htmlToText keeps anchor targets without duplicating visible urls', () => {
+  assert.equal(
+    htmlToText(
+      '<p>Click <a href="https://example.com/verify?x=1&amp;y=2">here</a></p>',
+    ),
+    'Click here https://example.com/verify?x=1&y=2',
+  )
+  assert.equal(
+    htmlToText('<a href="https://example.com/a">https://example.com/a</a>'),
+    'https://example.com/a',
+  )
+  assert.equal(
+    htmlToText('<a href="mailto:help@example.com">help@example.com</a>'),
+    'help@example.com',
+  )
+  assert.equal(
+    htmlToText(
+      '<a href="https://example.com">first</a> <a href="https://example.com">second</a>',
+    ),
+    'first https://example.com second',
+  )
+})
+
+test('renderBodyPages linkifies https and www but not http', () => {
+  const html = renderBodyPages(
+    'Go to https://example.com/a?b=1&c=2, or www.example.com/x. Old http://example.com.',
+    420,
+    700,
+  ).join('')
+  assert.ok(
+    html.includes(
+      '<a href="https://example.com/a?b=1&amp;c=2">https://example.com/a?b=1&amp;c=2</a>,',
+    ),
+  )
+  assert.ok(
+    html.includes('<a href="https://www.example.com/x">www.example.com/x</a>.'),
+  )
+  assert.ok(html.includes('http://example.com.'))
+  assert.equal(html.includes('<a href="http://'), false)
+})
+
+test('renderBodyPages makes verification codes copyable', () => {
+  const english = renderBodyPages(
+    'Your verification code is 482913.',
+    420,
+    700,
+  ).join('')
+  assert.ok(english.includes('Your verification code is <code>482913</code>.'))
+  const chinese = renderBodyPages('验证码：A1B2C3', 420, 700).join('')
+  assert.ok(chinese.includes('<code>A1B2C3</code>'))
+  const colon = renderBodyPages('Your code is: 482913.', 420, 700).join('')
+  assert.ok(colon.includes('<code>482913</code>'))
+  const chineseColon = renderBodyPages('验证码是：482913', 420, 700).join('')
+  assert.ok(chineseColon.includes('<code>482913</code>'))
+  const prefixed = renderBodyPages('Your code is G-123456.', 420, 700).join('')
+  assert.ok(prefixed.includes('<code>G-123456</code>'))
+  const plain = renderBodyPages('Order 482913 has shipped.', 420, 700).join('')
+  assert.equal(plain.includes('<code>'), false)
+  const url = renderBodyPages(
+    'Your code is at https://example.com/code/482913',
+    420,
+    700,
+  ).join('')
+  assert.equal(url.includes('<code>'), false)
+})
+
+test('renderBodyPages escapes text and never emits mail html', () => {
+  const html = renderBodyPages(
+    '<script>alert("x")</script> & "quoted"',
+    420,
+    700,
+  ).join('')
+  assert.equal(html.includes('<script'), false)
+  assert.ok(html.includes('&lt;script&gt;alert("x")&lt;/script&gt;'))
+  assert.ok(html.includes('&amp;'))
+})
+
+test('renderBodyPages keeps links whole and pages within the answer limit', () => {
+  const url = `https://example.com/reset?token=${'a'.repeat(200)}`
+  const text = `${'说明文字。'.repeat(80)} ${url} 验证码：482913`
+  const pages = renderBodyPages(text, 420, 700)
+  const visible = pages
+    .join('')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+  assert.equal(visible, text)
+  assert.ok(pages.some((page) => page.includes(`<a href="${url}">`)))
+  for (const page of pages) {
+    assert.ok(Buffer.byteLength(`99/99#999999\n${page}`, 'utf8') <= 1024)
+  }
+})
+
+test('renderBodyPages caps html for link-heavy pages', () => {
+  const text = Array.from({ length: 40 }, () => 'https://a.co').join(' ')
+  const pages = renderBodyPages(text, 420, 700)
+  for (const page of pages) {
+    assert.ok(Buffer.byteLength(`99/99#999999\n${page}`, 'utf8') <= 1024)
+  }
+})
+
+test('renderBodyPages reconstructs text and respects both limits', () => {
   const text = '邮件内容😀 with ASCII and a long line\n'.repeat(400)
-  const pages = paginateBody(text, 120, 300)
+  const pages = renderBodyPages(text, 120, 300)
   assert.ok(pages.length > 1)
   assert.equal(pages.join(''), text)
   for (const page of pages) {
     assert.ok([...page].length <= 120)
     assert.ok(Buffer.byteLength(page, 'utf8') <= 300)
   }
-  assert.deepEqual(paginateBody('', 120, 300), [''])
+  assert.deepEqual(renderBodyPages('', 120, 300), [''])
+})
+
+test('renderBodyPages keeps surrogate pairs intact', () => {
+  const text = '😀'.repeat(300)
+  const pages = renderBodyPages(text, 100, 300)
+  assert.equal(pages.join(''), text)
+  for (const page of pages) {
+    assert.equal(/[\uD800-\uDBFF]$/.test(page), false)
+    assert.equal(/^[\uDC00-\uDFFF]/.test(page), false)
+  }
 })
 
 test('buildChatData maps UUIDs to short refs and stays <= 1024 bytes', () => {

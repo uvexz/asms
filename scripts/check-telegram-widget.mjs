@@ -14,6 +14,12 @@ if (raw > 32_768) problems.push(`raw HTML ${raw} > 32768`)
 if (zlib > 4_096) problems.push(`zlib-9 ${zlib} > 4096`)
 if (gzip > 4_096) problems.push(`gzip-9 ${gzip} > 4096`)
 if (text.includes('\0')) problems.push('HTML contains a NUL character')
+if (
+  !text.includes('user-select:text') ||
+  !text.includes('-webkit-user-select:text')
+) {
+  problems.push('selectable text needs user-select:text and -webkit-user-select:text')
+}
 
 const forbidden = [
   [/https?:\/\//i, 'external URL'],

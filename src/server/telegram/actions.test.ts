@@ -158,7 +158,7 @@ test('read marks the real message read and returns the first body page', async (
   assert.equal(result.answer, 'body')
   assert.ok(result.body)
   assert.ok(result.body.total >= 2)
-  assert.ok(Buffer.byteLength(result.body.chunk, 'utf8') <= 700)
+  assert.ok(Buffer.byteLength(result.body.html, 'utf8') <= 960)
   assert.equal(context.widget.view, 'mail')
   assert.equal(context.widget.openId, context.message.id)
   assert.equal(context.service.messages.get(context.message.id)?.isRead, true)

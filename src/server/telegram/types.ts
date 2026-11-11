@@ -156,7 +156,7 @@ export type WidgetAction =
 export type BodyPage = {
   page: number
   total: number
-  chunk: string
+  html: string
 }
 
 export type ActionResult = {

@@ -646,7 +646,7 @@ function mergeRefs(target: TelegramSessionState, source: TelegramSessionState) {
 }
 
 function bodyAnswer(body: BodyPage, seq: number) {
-  return `${body.page}/${body.total}#${seq}\n${body.chunk}`
+  return `${body.page}/${body.total}#${seq}\n${body.html}`
 }
 
 function isMessageNotModified(error: unknown) {

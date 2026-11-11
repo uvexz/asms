@@ -4,7 +4,7 @@ import type { MailboxDto } from '#/server/services/mailboxes'
 import type { MessageDetail } from '#/server/services/messages'
 
 import { resolveRef } from './session'
-import { messageBody, paginateBody } from './state'
+import { messageBody, renderBodyPages } from './state'
 import type {
   ActionResult,
   BodyPage,
@@ -82,13 +82,13 @@ function bodyPage(
   requested: number,
   input: ActionInput,
 ): BodyPage {
-  const pages = paginateBody(
+  const pages = renderBodyPages(
     messageBody(message),
     input.bodyChars,
     input.bodyBytes,
   )
   const page = Math.min(Math.max(0, requested), pages.length - 1)
-  return { page, total: pages.length, chunk: pages[page] ?? '' }
+  return { page, total: pages.length, html: pages[page] ?? '' }
 }
 
 function requireRef(

@@ -70,7 +70,14 @@ async function reset() {
   service.mailboxes = [temp, permanent]
 
   const now = Date.now()
-  const samples = [
+  const samples: Array<{
+    fromName: string
+    subject: string
+    textBody: string
+    htmlBody?: string
+    hasAttachments?: boolean
+    isRead?: boolean
+  }> = [
     {
       fromName: 'asms',
       subject: '欢迎使用 Telegram 邮箱',
@@ -82,6 +89,18 @@ async function reset() {
       subject: 'Your verification code',
       textBody:
         'Your verification code is 482913.\n\nThis code expires in 10 minutes. If you did not request it, ignore this message.',
+    },
+    {
+      fromName: 'Example Service',
+      subject: 'Verify your email',
+      textBody: '',
+      htmlBody:
+        '<p>Hello,</p><p>Your verification code is <b>482913</b>.</p><p><a href="https://example.com/verify?token=abc123&amp;user=1">Verify your email</a></p>',
+    },
+    {
+      fromName: 'Long Link',
+      subject: '长链接分页测试',
+      textBody: `${'这是一段较长的说明文字。'.repeat(18)}\n\nhttps://example.com/reset?token=${'a'.repeat(180)}\n\n完成。`,
     },
     {
       fromName: '测试发件人',
@@ -114,6 +133,7 @@ async function reset() {
       fromName: sample.fromName,
       subject: sample.subject,
       textBody: sample.textBody,
+      htmlBody: sample.htmlBody ?? null,
       hasAttachments: sample.hasAttachments ?? false,
       isRead: sample.isRead ?? false,
       receivedAt: new Date(now - index * 3_600_000).toISOString(),
@@ -213,7 +233,7 @@ async function loadContext(
 }
 
 function bodyAnswer(body: BodyPage, seq: number) {
-  return `${body.page}/${body.total}#${seq}\n${body.chunk}`
+  return `${body.page}/${body.total}#${seq}\n${body.html}`
 }
 
 function previewError(error: unknown) {
@@ -349,7 +369,7 @@ const DARK = {
 
 function stubScript(theme: 'light' | 'dark', chatData: string) {
   const vars = theme === 'dark' ? DARK : LIGHT
-  return `<script>(function(){var V=${JSON.stringify(vars)};var s=document.createElement('style');s.textContent=':root{'+Object.keys(V).map(function(k){return k+':'+V[k]}).join(';')+'}html,body{background:var(--tg-theme-bg-color);color:var(--tg-theme-text-color)}';document.head.appendChild(s);var H={},state=${JSON.stringify(chatData)};var W={profile:1,isProfileAtLeast:function(){return true},colorScheme:${JSON.stringify(theme)},themeParams:{},isActive:true,isPreview:false,isForward:false,chatType:'private',viewer:{id:1,first_name:'Preview'},publicData:null,chatData:state,onEvent:function(t,f){(H[t]||(H[t]=[])).push(f)},offEvent:function(){},ready:function(){},copyText:function(t){if(navigator.clipboard)navigator.clipboard.writeText(t).catch(function(){})},request:function(data){return fetch('/preview/request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({data:data})}).then(function(r){return r.json()}).then(function(res){if(res.chatData){state=res.chatData;W.chatData=state;(H.chatDataChanged||[]).forEach(function(f){try{f()}catch(e){}})}return{result:res.answer}})},openLink:function(u){window.open(u,'_blank','noopener')},openTelegramLink:function(u){window.open(u,'_blank','noopener')},HapticFeedback:{impactOccurred:function(){},notificationOccurred:function(){},selectionChanged:function(){}},setResizeAnchor:function(){},watchPublicData:function(){},unwatchPublicData:function(){},contentSafeAreaInset:{bottom:0,cornerLeft:0,cornerRight:0},wallet:null};window.TelegramWidget=W;})()</script>`
+  return `<script>(function(){var V=${JSON.stringify(vars)};var s=document.createElement('style');s.textContent=':root{'+Object.keys(V).map(function(k){return k+':'+V[k]}).join(';')+'}html,body{background:var(--tg-theme-bg-color);color:var(--tg-theme-text-color)}a[href]{color:var(--tg-theme-link-color);text-decoration:none}';document.head.appendChild(s);var H={},state=${JSON.stringify(chatData)};var W={profile:1,isProfileAtLeast:function(){return true},colorScheme:${JSON.stringify(theme)},themeParams:{},isActive:true,isPreview:false,isForward:false,chatType:'private',viewer:{id:1,first_name:'Preview'},publicData:null,chatData:state,onEvent:function(t,f){(H[t]||(H[t]=[])).push(f)},offEvent:function(){},ready:function(){},copyText:function(t){if(navigator.clipboard)navigator.clipboard.writeText(t).catch(function(){})},request:function(data){return fetch('/preview/request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({data:data})}).then(function(r){return r.json()}).then(function(res){if(res.chatData){state=res.chatData;W.chatData=state;(H.chatDataChanged||[]).forEach(function(f){try{f()}catch(e){}})}return{result:res.answer}})},openLink:function(u){window.open(u,'_blank','noopener')},openTelegramLink:function(u){window.open(u,'_blank','noopener')},HapticFeedback:{impactOccurred:function(){},notificationOccurred:function(){},selectionChanged:function(){}},setResizeAnchor:function(){},watchPublicData:function(){},unwatchPublicData:function(){},contentSafeAreaInset:{bottom:0,cornerLeft:0,cornerRight:0},wallet:null};document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[href]');if(a){e.preventDefault();W.openLink(a.href)}},true);window.TelegramWidget=W;})()</script>`
 }
 
 function harnessHtml() {
@@ -388,6 +408,7 @@ async function route(
     )
     response.writeHead(200, {
       'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'no-store',
     })
     response.end(
       `<!doctype html><meta charset="utf-8">${stubScript(theme, initialChatData)}${html}`,
@@ -417,6 +438,7 @@ async function route(
 
   response.writeHead(200, {
     'content-type': 'text/html; charset=utf-8',
+    'cache-control': 'no-store',
   })
   response.end(harnessHtml())
 }
