@@ -208,8 +208,25 @@ export type SettingValue<TKey extends SettingKey> = z.infer<
 
 type SettingRow = typeof settings.$inferSelect
 
-let cache: { rows: Map<string, SettingRow>; expiresAt: number } | null = null
-let inflight: Promise<Map<string, SettingRow>> | null = null
+/**
+ * One snapshot of the `settings` table plus the values already parsed out of
+ * it. The table is tiny but the reads are not free: a secret costs an AES-GCM
+ * decrypt and every value costs a JSON parse and a zod parse, and `getSiteConfig`
+ * alone reads nine of them on the path that builds the auth instance. Parsed
+ * values therefore live beside the rows they came from — a new snapshot cannot
+ * inherit a value from the old one, so invalidation has nothing extra to clear.
+ */
+type SettingsSnapshot = {
+  rows: Map<string, SettingRow>
+  values: Map<string, unknown>
+  expiresAt: number
+}
+
+let snapshot: SettingsSnapshot | null = null
+let inflight: {
+  generation: number
+  promise: Promise<SettingsSnapshot>
+} | null = null
 let generation = 0
 
 const CACHE_TTL_MS = 15_000
@@ -222,39 +239,60 @@ const FAIL_CLOSED: Partial<Record<SettingKey, unknown>> = {
   'auth.emailPasswordEnabled': false,
 }
 
-async function loadRows(): Promise<Map<string, SettingRow>> {
-  if (cache && cache.expiresAt > Date.now()) return cache.rows
-  if (inflight) return inflight
+function clearInflight(target: {
+  generation: number
+  promise: Promise<SettingsSnapshot>
+}) {
+  if (inflight === target) inflight = null
+}
+
+async function loadSnapshot(): Promise<SettingsSnapshot> {
+  if (snapshot && snapshot.expiresAt > Date.now()) return snapshot
+  // A read that started before the last write must not satisfy a read that
+  // started after it, or the caller sees values it has just overwritten.
+  if (inflight && inflight.generation === generation) return inflight.promise
 
   const startGeneration = generation
-  inflight = (async () => {
+  const promise = (async () => {
     const rows = await db.select().from(settings)
-    const map = new Map(rows.map((row) => [row.key, row]))
-    // A write may have invalidated the cache while this read was in flight;
-    // do not repopulate it with rows that predate the invalidation.
-    if (startGeneration === generation) {
-      cache = { rows: map, expiresAt: Date.now() + CACHE_TTL_MS }
+    const next: SettingsSnapshot = {
+      rows: new Map(rows.map((row) => [row.key, row])),
+      values: new Map(),
+      expiresAt: Date.now() + CACHE_TTL_MS,
     }
-    return map
-  })().finally(() => {
-    inflight = null
-  })
+    // A write may have landed while this read was in flight; do not repopulate
+    // the cache with rows that predate the invalidation.
+    if (startGeneration === generation) snapshot = next
+    return next
+  })()
 
-  return inflight
+  const entry = { generation: startGeneration, promise }
+  inflight = entry
+  void promise.then(
+    () => clearInflight(entry),
+    () => clearInflight(entry),
+  )
+  return promise
 }
 
 export function invalidateSettings() {
   generation += 1
-  cache = null
-  mailPolicyCache = null
-  siteConfigCache = null
+  snapshot = null
+  mailPolicyState.lease = null
+  siteConfigState.lease = null
 }
 
 export async function getSetting<TKey extends SettingKey>(
   key: TKey,
 ): Promise<SettingValue<TKey>> {
   const def = SETTING_DEFS[key]
-  const row = (await loadRows()).get(key)
+  const current = await loadSnapshot()
+
+  if (current.values.has(key)) {
+    return current.values.get(key) as SettingValue<TKey>
+  }
+
+  const row = current.rows.get(key)
 
   let raw: unknown
   let corrupt = false
@@ -272,10 +310,14 @@ export async function getSetting<TKey extends SettingKey>(
     }
   }
 
-  if (corrupt && key in FAIL_CLOSED) {
-    return def.schema.parse(FAIL_CLOSED[key]) as SettingValue<TKey>
-  }
-  return def.schema.parse(raw) as SettingValue<TKey>
+  const value = (
+    corrupt && key in FAIL_CLOSED
+      ? def.schema.parse(FAIL_CLOSED[key])
+      : def.schema.parse(raw)
+  ) as SettingValue<TKey>
+
+  current.values.set(key, value)
+  return value
 }
 
 type SettingsWriter = Pick<typeof db, 'insert'>
@@ -329,7 +371,8 @@ export type AdminSettingRow = {
 }
 
 export async function getAdminSettings(): Promise<AdminSettingRow[]> {
-  const rows = await loadRows()
+  const current = await loadSnapshot()
+  const rows = current.rows
   return (Object.keys(SETTING_DEFS) as SettingKey[]).map((key) => {
     const def = SETTING_DEFS[key]
     const row = rows.get(key)
@@ -417,15 +460,68 @@ async function buildMailPolicy() {
 }
 
 type MailPolicy = Awaited<ReturnType<typeof buildMailPolicy>>
-let mailPolicyCache: { value: MailPolicy; expiresAt: number } | null = null
+
+/**
+ * A derived view of the settings — the mail policy, the site config — is
+ * rebuilt from several settings at once, so it needs its own lease. `generation`
+ * on the lease is what stops a build that started before a write from being
+ * published after it: the write bumped the generation and the lease is refused.
+ */
+type DerivedState<T> = {
+  lease: { value: T; expiresAt: number; generation: number } | null
+  inflight: Promise<T> | null
+}
+
+function forgetWhenSettled<T>(state: DerivedState<T>, promise: Promise<T>) {
+  const clear = () => {
+    if (state.inflight === promise) state.inflight = null
+  }
+  void promise.then(clear, clear)
+}
+
+/**
+ * Serves a derived view from its lease, or rebuilds it. The in-flight promise
+ * is shared so a cold cache under concurrent requests runs one build instead of
+ * one per request.
+ */
+async function readDerived<T>(
+  state: DerivedState<T>,
+  build: () => Promise<T>,
+): Promise<T> {
+  const lease = state.lease
+  if (
+    lease &&
+    lease.generation === generation &&
+    lease.expiresAt > Date.now()
+  ) {
+    return lease.value
+  }
+  if (state.inflight) return state.inflight
+
+  const startGeneration = generation
+  const promise = build().then((value) => {
+    if (startGeneration === generation) {
+      state.lease = {
+        value,
+        expiresAt: Date.now() + CACHE_TTL_MS,
+        generation: startGeneration,
+      }
+    }
+    return value
+  })
+
+  state.inflight = promise
+  forgetWhenSettled(state, promise)
+  return promise
+}
+
+const mailPolicyState: DerivedState<MailPolicy> = {
+  lease: null,
+  inflight: null,
+}
 
 export async function getMailPolicy(): Promise<MailPolicy> {
-  if (mailPolicyCache && mailPolicyCache.expiresAt > Date.now()) {
-    return mailPolicyCache.value
-  }
-  const value = await buildMailPolicy()
-  mailPolicyCache = { value, expiresAt: Date.now() + CACHE_TTL_MS }
-  return value
+  return readDerived(mailPolicyState, buildMailPolicy)
 }
 
 async function buildSiteConfig() {
@@ -472,13 +568,12 @@ async function buildSiteConfig() {
 }
 
 type SiteConfig = Awaited<ReturnType<typeof buildSiteConfig>>
-let siteConfigCache: { value: SiteConfig; expiresAt: number } | null = null
+
+const siteConfigState: DerivedState<SiteConfig> = {
+  lease: null,
+  inflight: null,
+}
 
 export async function getSiteConfig(): Promise<SiteConfig> {
-  if (siteConfigCache && siteConfigCache.expiresAt > Date.now()) {
-    return siteConfigCache.value
-  }
-  const value = await buildSiteConfig()
-  siteConfigCache = { value, expiresAt: Date.now() + CACHE_TTL_MS }
-  return value
+  return readDerived(siteConfigState, buildSiteConfig)
 }

@@ -6,6 +6,8 @@
 | ------------------------------ | -------- | ----------------------------------------------------------------------------- |
 | `DATABASE_URL`                 | 是       | 本地 `file:dev.db`；线上 `libsql://xxx.turso.io`                              |
 | `DATABASE_AUTH_TOKEN`          | 线上必填 | Turso 数据库令牌                                                              |
+| `DATABASE_CONCURRENCY`         | 否       | 每进程数据库连接上限；默认本地文件 8、远程 20                                 |
+| `DATABASE_BUSY_TIMEOUT_MS`     | 否       | 写锁等待上限，默认 5000；超时才报 `SQLITE_BUSY`                               |
 | `BETTER_AUTH_URL`              | 是       | 站点完整 URL，如 `https://mail.example.com`                                   |
 | `BETTER_AUTH_SECRET`           | 是       | Better Auth 会话签名密钥                                                      |
 | `ASMS_ENCRYPTION_KEY`          | 是       | AES-256-GCM 密钥；生产环境缺失会拒绝启动                                      |
@@ -50,3 +52,9 @@ turso db tokens create asms
 ```
 
 把 URL 与 token 写入 `DATABASE_URL`、`DATABASE_AUTH_TOKEN` 后执行 `bun run db:migrate`。
+
+### 连接池与等待
+
+驱动按 `DATABASE_CONCURRENCY` 在进程内维持一组连接，每条连接各自带一个 `busy_timeout`。等待时长必须通过客户端选项传入，写成 `PRAGMA busy_timeout` 只会作用在恰好执行这条语句的那一条连接上，其余连接仍是 0（立即报 `SQLITE_BUSY`）。写冲突在客户端重试 3 次（25ms 起、带抖动），只重试「确定未执行」的错误，超时与 5xx 不重试，避免重复写入。
+
+本地文件库首次打开时设置 WAL，并保持该设置持久化；`synchronous`、`cache_size` 一类只能在单条连接上生效的 PRAGMA 没有逐个设置，不做承诺。

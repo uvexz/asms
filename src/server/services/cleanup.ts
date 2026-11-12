@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lt, lte, ne, or } from 'drizzle-orm'
+import { and, eq, inArray, isNull, lt, lte, ne, or, sql } from 'drizzle-orm'
 
 import { db } from '#/db'
 import {
@@ -9,6 +9,7 @@ import {
   mailboxes,
   messages,
   rateLimits,
+  sendQuota,
   sentEmails,
   session,
   verification,
@@ -23,6 +24,9 @@ import { getSetting } from '../settings'
 const MESSAGE_BATCH = 1000
 const MAILBOX_BATCH = 200
 const CLEANUP_BUDGET_MS = 8_000
+/** Long enough to answer "what did this account send last month", short enough
+ * that the table stays proportional to active users. */
+const QUOTA_RETENTION_DAYS = 90
 
 export async function runCleanup() {
   const now = new Date()
@@ -174,6 +178,27 @@ export async function runCleanup() {
     .where(lt(rateLimits.expiresAt, now.getTime()))
     .returning({ key: rateLimits.key })
 
+  // Quota rows are keyed by a calendar day and only ever read for today, so
+  // everything before the window is dead weight that would grow by one row per
+  // sender per day forever. `quotaDate` is zero-padded ISO, so a string
+  // comparison is the same comparison as a date one.
+  const staleQuota = new Date(now.getTime() - QUOTA_RETENTION_DAYS * 86_400_000)
+    .toISOString()
+    .slice(0, 10)
+  const quota = await db
+    .delete(sendQuota)
+    .where(lt(sendQuota.quotaDate, staleQuota))
+    .returning({ userId: sendQuota.userId })
+
+  // Bulk deletes leave the query planner holding statistics for rows that no
+  // longer exist. `PRAGMA optimize` re-analyses only the tables whose shape
+  // actually moved, which is what keeps later reads picking the same indexes.
+  try {
+    await db.run(sql`PRAGMA optimize`)
+  } catch (error) {
+    console.warn('[asms] PRAGMA optimize failed', error)
+  }
+
   return {
     messages: deletedMessages,
     mailboxes: deletedMailboxes,
@@ -184,6 +209,7 @@ export async function runCleanup() {
     sessions: sessions.length,
     verifications: verifications.length,
     rateLimits: limits.length,
+    sendQuota: quota.length,
     objects: canStore ? keys.size : 0,
     truncated,
     ranAt: new Date().toISOString(),
