@@ -17,8 +17,8 @@ function send(data,silent){
  if(!W||!W.request){if(!silent)err='当前客户端不支持操作';render();return}
  if(busy)return;busy=true;err='';
  var p;try{p=W.request(data)}catch(x){busy=false;if(!silent)err=errT(x&&x.code);render();return}
- render();
- function done(){busy=false;render()}
+ if(!silent)render();
+ function done(){busy=false;if(!silent)render()}
  p.then(function(r){
   var v=r&&r.result;if(!v)return;
   if(v.indexOf('ok:')===0||v.indexOf('same:')===0)return;

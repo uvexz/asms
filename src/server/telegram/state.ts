@@ -15,11 +15,18 @@ export const MAILBOX_PAGE_SIZE = 6
 const STATE_LIMIT = 1024
 const BODY_LIMIT = 64 * 1024
 
+/**
+ * The card only ever prints three fields of the active mailbox. Reading a
+ * message already carries all three, so the mail view never has to load the
+ * mailbox list just to label its own header.
+ */
+export type ActiveMailbox = Pick<MailboxDto, 'id' | 'address' | 'kind'>
+
 export type BuildInput = {
   state: TelegramSessionState
   widget: WidgetView
   mailboxes: MailboxDto[]
-  active: MailboxDto | null
+  active: ActiveMailbox | null
   inbox: { items: MessageListItem[]; total: number } | null
   /** 0-based page of `inbox.items` (already fetched and clamped). */
   inboxPage: number

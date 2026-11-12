@@ -97,41 +97,6 @@ export async function saveSession(input: {
   return result.rowsAffected > 0 ? input.expectedVersion + 1 : null
 }
 
-/** Best-effort update of the server-side copy of the last state the widget
- * received. A conflict is safe: the next action simply edits again. */
-export async function saveLastChatData(input: {
-  telegramUserId: string
-  messageId: number
-  chatData: string
-}): Promise<void> {
-  const row = await db
-    .select()
-    .from(telegramSessions)
-    .where(eq(telegramSessions.telegramUserId, input.telegramUserId))
-    .get()
-  if (!row) return
-
-  const state = parseSessionState(row.stateJson)
-  if (!state) return
-  const widget = state.widgets[String(input.messageId)]
-  if (!widget) return
-  widget.lastChatData = input.chatData
-
-  await db
-    .update(telegramSessions)
-    .set({
-      stateJson: serializeSessionState(state),
-      version: row.version + 1,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(telegramSessions.telegramUserId, input.telegramUserId),
-        eq(telegramSessions.version, row.version),
-      ),
-    )
-}
-
 export async function deleteSession(telegramUserId: string): Promise<void> {
   await db
     .delete(telegramSessions)

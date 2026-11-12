@@ -15,7 +15,10 @@ import widgetHtml from '#/server/telegram/widget.html?raw'
 
 const MAX_BYTES = 64 * 1024
 const NO_STORE = { 'cache-control': 'no-store' }
-let lastPrune = 0
+const PRUNE_EVERY = 6 * 60 * 60_000
+// Boot is not a reason to run housekeeping: a fresh process starts its window
+// now, so the first user request only pays for its own work.
+let lastPrune = Date.now()
 
 function secretMatches(expected: string, received: string) {
   const a = Buffer.from(expected)
@@ -76,11 +79,6 @@ export const Route = createFileRoute('/api/telegram/webhook')({
           })
         }
 
-        if (Date.now() - lastPrune > 6 * 60 * 60_000) {
-          lastPrune = Date.now()
-          await pruneUpdates().catch(() => undefined)
-        }
-
         const claimed = await claimUpdate(update.update_id)
         if (!claimed) {
           return Response.json(
@@ -92,6 +90,12 @@ export const Route = createFileRoute('/api/telegram/webhook')({
         try {
           await handleTelegramUpdate(update, { widgetHtml })
           await completeUpdate(update.update_id)
+          // Housekeeping rides after the answer: the update table is only
+          // read for idempotency, so nothing above waits on it.
+          if (Date.now() - lastPrune > PRUNE_EVERY) {
+            lastPrune = Date.now()
+            await pruneUpdates().catch(() => undefined)
+          }
           return Response.json({ ok: true }, { headers: NO_STORE })
         } catch (error) {
           console.error(

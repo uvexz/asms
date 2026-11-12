@@ -20,8 +20,9 @@ import {
   INBOX_PAGE_SIZE,
   MAILBOX_PAGE_SIZE,
 } from './state'
+import type { ActiveMailbox } from './state'
 import type { LoadedSession } from './store'
-import { loadSession, saveLastChatData, saveSession } from './store'
+import { loadSession, saveSession } from './store'
 import type {
   ActionResult,
   BodyPage,
@@ -48,7 +49,7 @@ type Runtime = {
 
 type Context = {
   mailboxes: MailboxDto[]
-  active: MailboxDto | null
+  active: ActiveMailbox | null
   inbox: { items: MessageListItem[]; total: number } | null
   inboxPage: number
   open: MessageDetail | null
@@ -163,14 +164,16 @@ async function handleStart(
       return
     }
 
-    await audit({
-      actorId: result.userId,
-      action: 'telegram.link',
-      targetType: 'telegram',
-      targetId: String(from.id),
-      meta: { username: from.username ?? null },
-    })
-    await sendNewWidget(runtime, from, chatId, result.userId)
+    await Promise.all([
+      audit({
+        actorId: result.userId,
+        action: 'telegram.link',
+        targetType: 'telegram',
+        targetId: String(from.id),
+        meta: { username: from.username ?? null },
+      }),
+      sendNewWidget(runtime, from, chatId, result.userId),
+    ])
     return
   }
 
@@ -183,7 +186,8 @@ async function handleStart(
     await sendText(runtime, chatId, '该账户已被封禁。')
     return
   }
-  await touchLink(String(from.id), from).catch(() => undefined)
+  // Last-seen bookkeeping must not stand between the command and the card.
+  void touchLink(String(from.id), from).catch(() => undefined)
   await sendNewWidget(runtime, from, chatId, link.userId)
 }
 
@@ -216,6 +220,7 @@ async function handleCreateCommand(
         link,
         chatId,
         messageId: loaded.activeMessageId,
+        loaded,
         action: { kind: 'create' },
         createLocalPart,
         onSaved: async () => undefined,
@@ -324,6 +329,8 @@ type MutationInput = {
   link: LinkRecord
   chatId: number
   messageId: number
+  /** Session already loaded by the caller; the first attempt reuses it. */
+  loaded: LoadedSession
   action: WidgetAction
   createLocalPart?: string
   onSaved: (input: {
@@ -347,8 +354,12 @@ async function runWidgetMutation(
   const telegramUserId = String(link.telegramUserId)
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const loaded = await loadSession(telegramUserId, String(input.chatId))
+    const loaded =
+      attempt === 0
+        ? input.loaded
+        : await loadSession(telegramUserId, String(input.chatId))
     const widget = ensureWidget(loaded.state, input.messageId, runtime.now)
+    const previousMessageId = loaded.activeMessageId
     loaded.activeMessageId = input.messageId
 
     const result = await applyAction({
@@ -395,6 +406,13 @@ async function runWidgetMutation(
       json = built.json
     }
 
+    // A poll that changes nothing visible is exactly the state the widget
+    // already holds: answering is enough, the row does not need rewriting.
+    if (!changed && previousMessageId === input.messageId) {
+      await input.onSaved({ changed, seq, result })
+      return { changed, seq, result, gone: false }
+    }
+
     const version = await saveSession({
       telegramUserId,
       chatId: String(input.chatId),
@@ -408,27 +426,17 @@ async function runWidgetMutation(
 
     let gone = false
     if (changed) {
+      let delivered = false
       try {
         await runtime.api.editMessageWidgetData({
           chat_id: input.chatId,
           message_id: input.messageId,
           chat_data: json,
         })
-        widget.lastChatData = json
-        widget.updatedAt = Date.now()
-        await saveLastChatData({
-          telegramUserId,
-          messageId: input.messageId,
-          chatData: json,
-        })
+        delivered = true
       } catch (error) {
         if (isMessageNotModified(error)) {
-          widget.lastChatData = json
-          await saveLastChatData({
-            telegramUserId,
-            messageId: input.messageId,
-            chatData: json,
-          })
+          delivered = true
         } else if (isMessageGone(error)) {
           gone = true
         } else {
@@ -437,6 +445,21 @@ async function runWidgetMutation(
             error instanceof Error ? error.message : error,
           )
         }
+      }
+
+      if (delivered) {
+        widget.lastChatData = json
+        widget.updatedAt = Date.now()
+        // One write over the row we just saved, instead of reading it back to
+        // set a single field. A lost race only makes the next action edit
+        // again, which is the harmless direction.
+        await saveSession({
+          telegramUserId,
+          chatId: String(input.chatId),
+          activeMessageId: input.messageId,
+          state: loaded.state,
+          expectedVersion: version,
+        })
       }
     }
 
@@ -456,16 +479,19 @@ async function handleWidgetQuery(query: TelegramWidgetQuery, runtime: Runtime) {
     return
   }
 
-  const limit = await consumeRateLimit(
-    RATE_LIMITS.telegramAction,
-    String(query.from.id),
-  )
+  // Three independent reads feed every query the card sends. One wave, not
+  // three: the session is also what the mutation below starts from, so the
+  // preloaded copy is reused rather than read a second time.
+  const [limit, link, loaded] = await Promise.all([
+    consumeRateLimit(RATE_LIMITS.telegramAction, String(query.from.id)),
+    getLink(String(query.from.id)),
+    loadSession(String(query.from.id), String(query.chat.id)),
+  ])
+
   if (!limit.allowed) {
     await answer(runtime, query, 'err:busy')
     return
   }
-
-  const link = await getLink(String(query.from.id))
   if (!link) {
     await answerBlocked(runtime, query, 'unlinked')
     return
@@ -483,10 +509,6 @@ async function handleWidgetQuery(query: TelegramWidgetQuery, runtime: Runtime) {
 
   if (action.kind === 'body') {
     try {
-      const loaded = await loadSession(
-        String(query.from.id),
-        String(query.chat.id),
-      )
       const widget = ensureWidget(loaded.state, query.message_id, runtime.now)
       const result = await applyAction({
         state: loaded.state,
@@ -524,6 +546,7 @@ async function handleWidgetQuery(query: TelegramWidgetQuery, runtime: Runtime) {
       link,
       chatId: query.chat.id,
       messageId: query.message_id,
+      loaded,
       action,
       createLocalPart,
       onSaved: async ({ changed, seq, result }) => {
@@ -553,8 +576,60 @@ async function loadContext(
   runtime: Runtime,
   overrides: ContextOverrides = {},
 ): Promise<Context> {
-  const mailboxes =
-    overrides.mailboxes ?? (await runtime.service.listMailboxes(userId))
+  if (widget.view === 'mail') {
+    let open: MessageDetail | null = overrides.open ?? null
+    if (!open && widget.openId) {
+      try {
+        open = await runtime.service.getMessage(userId, widget.openId)
+      } catch {
+        open = null
+      }
+    }
+    if (!open || open.mailboxId !== loaded.state.activeMailboxId) {
+      widget.view = 'home'
+      widget.openId = null
+      widget.error = 'gone'
+    } else {
+      // The mail view has no chip rail, and the message already carries the
+      // three mailbox fields the card prints, so the mailbox list is skipped.
+      return {
+        mailboxes: [],
+        active: {
+          id: open.mailboxId,
+          address: open.mailboxAddress,
+          kind: open.mailboxKind,
+        },
+        inbox: null,
+        inboxPage: 0,
+        open,
+      }
+    }
+  }
+
+  const listed = overrides.mailboxes
+    ? Promise.resolve(overrides.mailboxes)
+    : runtime.service.listMailboxes(userId)
+
+  // The session already names the mailbox the card shows, so the inbox page
+  // is read in the same wave as the mailbox list instead of after it. A
+  // mailbox that vanished meanwhile rejects here and is read again below.
+  const guessId =
+    overrides.active !== undefined
+      ? (overrides.active?.id ?? null)
+      : loaded.state.activeMailboxId
+  const guess =
+    guessId === null || widget.view !== 'home'
+      ? null
+      : runtime.service
+          .listMessages({
+            userId,
+            mailboxId: guessId,
+            page: Math.max(0, widget.page) + 1,
+            pageSize: INBOX_PAGE_SIZE,
+          })
+          .catch(() => null)
+
+  const mailboxes = await listed
   const active =
     overrides.active !== undefined
       ? overrides.active
@@ -572,34 +647,19 @@ async function loadContext(
     ? clamp(widget.mailboxPage, 0, chipPages - 1)
     : 0
 
-  let open: MessageDetail | null = null
-  if (widget.view === 'mail') {
-    open = overrides.open ?? null
-    if (!open && widget.openId) {
-      try {
-        open = await runtime.service.getMessage(userId, widget.openId)
-      } catch {
-        open = null
-      }
-    }
-    if (!open || open.mailboxId !== active?.id) {
-      widget.view = 'home'
-      widget.openId = null
-      widget.error = 'gone'
-      open = null
-    }
-  }
-
   let inbox: Context['inbox'] = null
   let inboxPage = 0
   if (widget.view === 'home' && active) {
     let page = Math.max(0, widget.page)
-    let result = await runtime.service.listMessages({
-      userId,
-      mailboxId: active.id,
-      page: page + 1,
-      pageSize: INBOX_PAGE_SIZE,
-    })
+    let result = guess && guessId === active.id ? await guess : null
+    if (!result) {
+      result = await runtime.service.listMessages({
+        userId,
+        mailboxId: active.id,
+        page: page + 1,
+        pageSize: INBOX_PAGE_SIZE,
+      })
+    }
     const totalPages = result.total
       ? Math.ceil(result.total / INBOX_PAGE_SIZE)
       : 0
@@ -618,7 +678,7 @@ async function loadContext(
     inboxPage = page
   }
 
-  return { mailboxes, active, inbox, inboxPage, open }
+  return { mailboxes, active, inbox, inboxPage, open: null }
 }
 
 function bodyAnswer(body: BodyPage, seq: number) {
