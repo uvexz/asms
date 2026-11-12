@@ -1,22 +1,38 @@
-function formatDateTime(value: string | Date): string {
-  const date = typeof value === 'string' ? new Date(value) : value
-  return new Intl.DateTimeFormat('zh-CN', {
+/**
+ * Formatters are built once and reused. Constructing one costs roughly sixty
+ * times more than formatting with it, and these run for every row of a list
+ * that repaints on each poll.
+ */
+let shortDateTime: Intl.DateTimeFormat | undefined
+let fullDateTime: Intl.DateTimeFormat | undefined
+
+function shortDateTimeFormatter() {
+  return (shortDateTime ??= new Intl.DateTimeFormat('zh-CN', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(date)
+  }))
 }
 
-export function formatFullDateTime(value: string | Date): string {
-  const date = typeof value === 'string' ? new Date(value) : value
-  return new Intl.DateTimeFormat('zh-CN', {
+function fullDateTimeFormatter() {
+  return (fullDateTime ??= new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(date)
+  }))
+}
+
+function formatDateTime(value: string | Date): string {
+  const date = typeof value === 'string' ? new Date(value) : value
+  return shortDateTimeFormatter().format(date)
+}
+
+export function formatFullDateTime(value: string | Date): string {
+  const date = typeof value === 'string' ? new Date(value) : value
+  return fullDateTimeFormatter().format(date)
 }
 
 export function formatRelative(value: string | Date): string {

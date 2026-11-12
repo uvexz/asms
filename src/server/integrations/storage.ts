@@ -1,13 +1,25 @@
-import {
-  DeleteObjectsCommand,
-  GetObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import type * as S3Sdk from '@aws-sdk/client-s3'
+import type * as S3Presigner from '@aws-sdk/s3-request-presigner'
 
 import { AppError } from '../result'
 import { getSetting } from '../settings'
+
+/**
+ * The S3 SDK is a few hundred kilobytes of JavaScript that most deployments
+ * never exercise, yet a static import puts it on the path of every cold start.
+ * Loading it on the first storage call keeps it off that path; the module
+ * cache makes every later call free, and `resetS3Client` only drops the
+ * client, never the module.
+ */
+let sdkModule: Promise<typeof S3Sdk> | null = null
+function loadSdk() {
+  return (sdkModule ??= import('@aws-sdk/client-s3'))
+}
+
+let presignerModule: Promise<typeof S3Presigner> | null = null
+function loadPresigner() {
+  return (presignerModule ??= import('@aws-sdk/s3-request-presigner'))
+}
 
 type S3Config = {
   endpoint: string
@@ -18,7 +30,8 @@ type S3Config = {
   forcePathStyle: boolean
 }
 
-let cached: { key: string; client: S3Client; bucket: string } | null = null
+let cached: { key: string; client: S3Sdk.S3Client; bucket: string } | null =
+  null
 
 export async function getS3Config(): Promise<S3Config> {
   const [
@@ -51,7 +64,10 @@ export function isS3Configured(config: S3Config): boolean {
   return Boolean(config.bucket && config.accessKeyId && config.secretAccessKey)
 }
 
-async function getClient(): Promise<{ client: S3Client; bucket: string }> {
+async function getClient(): Promise<{
+  client: S3Sdk.S3Client
+  bucket: string
+}> {
   const config = await getS3Config()
   if (!isS3Configured(config)) {
     throw new AppError('S3_NOT_CONFIGURED', '尚未配置对象存储')
@@ -59,6 +75,7 @@ async function getClient(): Promise<{ client: S3Client; bucket: string }> {
 
   const key = JSON.stringify(config)
   if (!cached || cached.key !== key) {
+    const { S3Client } = await loadSdk()
     cached = {
       key,
       bucket: config.bucket,
@@ -82,7 +99,10 @@ export async function uploadObject(
   body: Uint8Array,
   contentType: string,
 ): Promise<void> {
-  const { client, bucket } = await getClient()
+  const [{ client, bucket }, { PutObjectCommand }] = await Promise.all([
+    getClient(),
+    loadSdk(),
+  ])
   await client.send(
     new PutObjectCommand({
       Bucket: bucket,
@@ -98,7 +118,8 @@ export async function getDownloadUrl(
   filename: string,
   expiresIn = 300,
 ): Promise<string> {
-  const { client, bucket } = await getClient()
+  const [{ client, bucket }, { GetObjectCommand }, { getSignedUrl }] =
+    await Promise.all([getClient(), loadSdk(), loadPresigner()])
   return getSignedUrl(
     client,
     new GetObjectCommand({
@@ -113,7 +134,10 @@ export async function getDownloadUrl(
 const DELETE_BATCH_SIZE = 1000
 
 async function deleteObjectBatches(keys: string[]): Promise<string[]> {
-  const { client, bucket } = await getClient()
+  const [{ client, bucket }, { DeleteObjectsCommand }] = await Promise.all([
+    getClient(),
+    loadSdk(),
+  ])
   const failed: string[] = []
 
   for (let offset = 0; offset < keys.length; offset += DELETE_BATCH_SIZE) {

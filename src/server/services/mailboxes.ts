@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray } from 'drizzle-orm'
+import { and, count, desc, eq, sql } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 
 import { db } from '#/db'
@@ -107,6 +107,18 @@ export function isExpired(row: {
   )
 }
 
+/**
+ * The same rule as `isExpired`, spelled for the database so a read can drop
+ * dead temporary mailboxes before they reach the process. Both spellings live
+ * here on purpose: this is the only place that decides what "gone" means, and
+ * a JS copy elsewhere would be free to drift. Reads on the `mailboxes` table
+ * may use it directly — it names the table's own columns.
+ */
+export function liveMailboxCondition(now: Date) {
+  const at = Math.floor(now.getTime() / 1000)
+  return sql`not (${mailboxes.kind} = 'temporary' and ${mailboxes.lastReceivedAt} is null and (${mailboxes.expiresAt} is null or ${mailboxes.expiresAt} <= ${at}))`
+}
+
 /** Reserved words ignore case and `._-`, so `no.reply` cannot slip past `noreply`. */
 function isReserved(localPart: string, reserved: string[]) {
   const target = localPart.replace(/[^a-z0-9]/g, '')
@@ -205,41 +217,32 @@ async function findAvailableDomain(
 }
 
 export async function listMailboxes(userId: string): Promise<MailboxDto[]> {
+  // The unread badge is a correlated count, not a second round trip: the
+  // partial index on unread messages serves it as a covering scan, so one
+  // statement answers the whole rail.
   const rows = await db
-    .select({ mailbox: mailboxes, domainName: domains.name })
+    .select({
+      mailbox: mailboxes,
+      domainName: domains.name,
+      unread: sql<number>`(
+        select count(*) from ${messages}
+        where ${messages.mailboxId} = ${mailboxes.id}
+          and ${messages.isRead} = 0
+      )`,
+    })
     .from(mailboxes)
     .innerJoin(domains, eq(mailboxes.domainId, domains.id))
-    .where(eq(mailboxes.userId, userId))
-    .orderBy(desc(mailboxes.createdAt))
-
-  const active = rows.filter(
-    (row) => !isExpired(row.mailbox) && row.mailbox.status === 'active',
-  )
-  if (active.length === 0) return []
-
-  const counts = await db
-    .select({ mailboxId: messages.mailboxId, value: count() })
-    .from(messages)
     .where(
       and(
-        inArray(
-          messages.mailboxId,
-          active.map((row) => row.mailbox.id),
-        ),
-        eq(messages.isRead, false),
+        eq(mailboxes.userId, userId),
+        eq(mailboxes.status, 'active'),
+        liveMailboxCondition(new Date()),
       ),
     )
-    .groupBy(messages.mailboxId)
-  const unreadByMailbox = new Map(
-    counts.map((row) => [row.mailboxId, row.value]),
-  )
+    .orderBy(desc(mailboxes.createdAt))
 
-  return active.map((row) =>
-    serializeMailbox(
-      row.mailbox,
-      row.domainName,
-      unreadByMailbox.get(row.mailbox.id) ?? 0,
-    ),
+  return rows.map((row) =>
+    serializeMailbox(row.mailbox, row.domainName, row.unread ?? 0),
   )
 }
 

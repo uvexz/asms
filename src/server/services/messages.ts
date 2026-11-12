@@ -1,11 +1,11 @@
-import { and, count, desc, eq, inArray } from 'drizzle-orm'
+import { and, count, desc, eq } from 'drizzle-orm'
 
 import { db } from '#/db'
 import { attachments, domains, mailboxes, messages } from '#/db/schema'
 import { deleteObjects } from '../integrations/storage'
 import { RATE_LIMITS, enforceRateLimit } from '../rate-limit'
 import { assert } from '../result'
-import { formatAddress, isExpired } from './mailboxes'
+import { formatAddress, isExpired, liveMailboxCondition } from './mailboxes'
 
 export type MessageListItem = {
   id: string
@@ -63,32 +63,22 @@ async function assertMailboxOwner(userId: string, mailboxId: string) {
 }
 
 /**
- * The set of mailboxes a list request may read from. Expired temporary
- * mailboxes drop out here even before the cleanup cron removes their rows, so
- * an aggregate view never surfaces mail the user can no longer open.
+ * The mailboxes a list request may read from: the named one (after the owner
+ * and liveness checks) or every live mailbox the user owns. Returning a
+ * predicate instead of a list of ids folds the scope into the two statements
+ * that already run, and leaves their text identical between users so the
+ * driver can reuse its prepared copy.
  */
-async function resolveMailboxScope(
-  userId: string,
-  mailboxId?: string,
-): Promise<string[]> {
-  if (mailboxId) {
-    const row = await assertMailboxOwner(userId, mailboxId)
-    assert(row.status === 'active', 'MAILBOX_DISABLED', '邮箱已停用')
-    assert(!isExpired(row), 'MAILBOX_EXPIRED', '临时邮箱已过期')
-    return [row.id]
-  }
-
-  const rows = await db
-    .select({
-      id: mailboxes.id,
-      kind: mailboxes.kind,
-      expiresAt: mailboxes.expiresAt,
-      lastReceivedAt: mailboxes.lastReceivedAt,
-    })
-    .from(mailboxes)
-    .where(and(eq(mailboxes.userId, userId), eq(mailboxes.status, 'active')))
-
-  return rows.filter((row) => !isExpired(row)).map((row) => row.id)
+function mailboxScope(userId: string, mailboxId?: string) {
+  if (mailboxId) return eq(messages.mailboxId, mailboxId)
+  return and(
+    eq(mailboxes.userId, userId),
+    eq(mailboxes.status, 'active'),
+    // Expired temporary mailboxes drop out here even before the cleanup cron
+    // removes their rows, so an aggregate view never surfaces mail the user
+    // can no longer open.
+    liveMailboxCondition(new Date()),
+  )
 }
 
 export async function listMessages(input: {
@@ -103,15 +93,13 @@ export async function listMessages(input: {
   const pageSize = Math.min(50, Math.max(1, input.pageSize ?? 20))
   const offset = (page - 1) * pageSize
 
-  const mailboxIds = await resolveMailboxScope(input.userId, input.mailboxId)
-  if (mailboxIds.length === 0) {
-    return { items: [], total: 0, page, pageSize, hasMore: false }
-  }
+  // The ownership check and the page read answer different questions from the
+  // same inputs, so they share one round trip rather than queueing.
+  const owned = input.mailboxId
+    ? assertMailboxOwner(input.userId, input.mailboxId)
+    : null
 
-  const scope =
-    mailboxIds.length === 1
-      ? eq(messages.mailboxId, mailboxIds[0])
-      : inArray(messages.mailboxId, mailboxIds)
+  const scope = mailboxScope(input.userId, input.mailboxId)
   const where = input.unreadOnly
     ? and(scope, eq(messages.isRead, false))
     : scope
@@ -140,7 +128,13 @@ export async function listMessages(input: {
       .orderBy(desc(messages.receivedAt))
       .limit(pageSize)
       .offset(offset),
-    db.select({ value: count() }).from(messages).where(where).get(),
+    db
+      .select({ value: count() })
+      .from(messages)
+      .innerJoin(mailboxes, eq(messages.mailboxId, mailboxes.id))
+      .where(where)
+      .get(),
+    owned,
   ])
 
   const items: MessageListItem[] = rows.map((row) => ({
@@ -171,13 +165,19 @@ export async function getMessage(
   userId: string,
   messageId: string,
 ): Promise<MessageDetail> {
-  const row = await db
-    .select({ message: messages, mailbox: mailboxes, domain: domains.name })
-    .from(messages)
-    .innerJoin(mailboxes, eq(messages.mailboxId, mailboxes.id))
-    .innerJoin(domains, eq(mailboxes.domainId, domains.id))
-    .where(and(eq(messages.id, messageId), eq(mailboxes.userId, userId)))
-    .get()
+  // Attachment metadata is keyed by message id alone, so it is read alongside
+  // the message; ownership is still asserted before anything leaves the
+  // server, and a message that fails that check returns no attachment names.
+  const [row, files] = await Promise.all([
+    db
+      .select({ message: messages, mailbox: mailboxes, domain: domains.name })
+      .from(messages)
+      .innerJoin(mailboxes, eq(messages.mailboxId, mailboxes.id))
+      .innerJoin(domains, eq(mailboxes.domainId, domains.id))
+      .where(and(eq(messages.id, messageId), eq(mailboxes.userId, userId)))
+      .get(),
+    db.select().from(attachments).where(eq(attachments.messageId, messageId)),
+  ])
 
   assert(row, 'MESSAGE_NOT_FOUND', '邮件不存在')
   assert(
@@ -185,11 +185,6 @@ export async function getMessage(
     'MESSAGE_NOT_FOUND',
     '邮件不存在',
   )
-
-  const files = await db
-    .select()
-    .from(attachments)
-    .where(eq(attachments.messageId, messageId))
 
   return {
     id: row.message.id,

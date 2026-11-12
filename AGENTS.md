@@ -58,3 +58,17 @@ Every server read that a screen keeps mounted goes through `@/lib/queries`. Noth
 - **Prefer patching the cache to refetching it** when a write changes one field the client can already compute — see the read flag in `app/mailboxes.tsx`. Refetch when the value is a sum the server owns (unread counts).
 - `fetchShell` stays in the router context on purpose: it is the session, read once per document and re-read on `router.invalidate()`. Do not move it into the query cache.
 - Sign out through `useSignOut()` — it drops the whole query cache, because `['mail', …]` belongs to the account that just left.
+
+# Server reads
+
+The mailbox page polls, so its reads are the ones that cost something. Two rules keep them cheap.
+
+- **One round trip per read.** Statements that do not depend on each other go in one `Promise.all` — the ownership check beside the page, the attachments beside the message. A serial `await` is another full latency of the database endpoint, and the local file driver hides that cost completely. `listMessages`, `getMessage`, `listMailboxes` and `fetchOverview` are the reference shape.
+- **The database filters, the process does not.** Whether a mailbox is still alive is `liveMailboxCondition` in `src/server/services/mailboxes.ts` — the SQL twin of `isExpired`, kept in the same file so the two spellings cannot drift. Do not re-filter with `isExpired` a list the query already narrowed, and do not pass a list of mailbox ids into `inArray` where a join on `mailboxes` says the same thing: the id list changes per call and defeats statement reuse.
+
+# Cold start
+
+Every module a route imports is parsed and evaluated before the first response leaves a fresh process. Optional weight therefore stays behind `import()`.
+
+- **An integration most deployments never configure loads on first use.** `src/server/integrations/storage.ts` is the reference: the S3 SDK is reached through `loadSdk()`, not a top-level import, so a site without object storage never pays for it. The module cache keeps later calls free.
+- Judge this with an A/B, not with a one-off `import()` — the first dynamic import in a process pays loader setup that dwarfs the module itself, and the local graph is small enough that a plausible-looking 70 ms turns out to be 4 ms.
