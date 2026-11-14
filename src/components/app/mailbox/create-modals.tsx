@@ -204,7 +204,13 @@ export function CreateMailboxModal({
   return (
     <Modal isOpen={isOpen} onOpenChange={onOpenChange} size="sm">
       {({ close }) => (
-        <>
+        <form
+          className="flex min-h-0 flex-1 flex-col gap-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            submit()
+          }}
+        >
           <ModalHeader
             title="创建邮箱"
             description={
@@ -255,11 +261,11 @@ export function CreateMailboxModal({
             <Button variant="secondary" onClick={close}>
               取消
             </Button>
-            <Button onClick={submit} disabled={!canSubmit}>
+            <Button type="submit" disabled={!canSubmit}>
               {create.isPending ? '创建中…' : '创建'}
             </Button>
           </ModalFooter>
-        </>
+        </form>
       )}
     </Modal>
   )
@@ -323,7 +329,13 @@ export function CreateTempMailboxModal({
   return (
     <Modal isOpen={isOpen} onOpenChange={onOpenChange} size="sm">
       {({ close }) => (
-        <>
+        <form
+          className="flex min-h-0 flex-1 flex-col gap-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            submit()
+          }}
+        >
           <ModalHeader
             title="创建临时邮箱"
             description={`有效期 ${formatDuration(TEMP_MAILBOX_TTL_MINUTES)}；期内收到邮件即保留，否则到期失效。`}
@@ -368,11 +380,11 @@ export function CreateTempMailboxModal({
             <Button variant="secondary" onClick={close}>
               取消
             </Button>
-            <Button onClick={submit} disabled={!canSubmit}>
+            <Button type="submit" disabled={!canSubmit}>
               {create.isPending ? '创建中…' : '创建'}
             </Button>
           </ModalFooter>
-        </>
+        </form>
       )}
     </Modal>
   )

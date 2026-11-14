@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
+import type { LinkProps } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import {
   RiCheckLine,
@@ -60,37 +61,35 @@ function AdminOverview() {
       icon: RiUserLine,
       label: '用户',
       value: String(overview.users),
-      delta: '',
-      deltaColor: 'neutral',
       tone: 'blue',
     },
     {
       icon: RiMailLine,
       label: '长期邮箱',
       value: String(overview.permanent),
-      delta: '',
-      deltaColor: 'neutral',
       tone: 'purple',
     },
     {
       icon: RiInboxLine,
       label: '临时邮箱',
       value: String(overview.temporary),
-      delta: '',
-      deltaColor: 'neutral',
       tone: 'orange',
     },
     {
       icon: RiGlobalLine,
       label: '已收邮件',
       value: String(overview.messages),
-      delta: '',
-      deltaColor: 'neutral',
       tone: 'emerald',
     },
   ]
 
-  const checklist = [
+  const checklist: Array<{
+    label: string
+    hint: string
+    done: boolean
+    /** `null` for a step with no page to send the reader to. */
+    href: LinkProps['to'] | null
+  }> = [
     {
       label: '配置 Resend API Key',
       hint: '站点设置 → Resend；发件与读取收件内容都依赖它',
@@ -121,7 +120,7 @@ function AdminOverview() {
       done: overview.health.cron,
       href: null,
     },
-  ] as const
+  ]
   const pending = checklist.filter((item) => !item.done)
 
   return (
@@ -180,7 +179,7 @@ function AdminOverview() {
                 </div>
                 {!item.done && item.href ? (
                   <Link
-                    to={item.href as never}
+                    to={item.href}
                     className="shrink-0 text-caption-1-medium text-accent-600 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-border-focus-ring"
                   >
                     去配置
@@ -248,10 +247,10 @@ function AdminOverview() {
   )
 }
 
-function QuickLink({ href, label }: { href: string; label: string }) {
+function QuickLink({ href, label }: { href: LinkProps['to']; label: string }) {
   return (
     <Link
-      to={href as never}
+      to={href}
       className="rounded-2xl border border-border-button-default bg-background-primary-default px-4 py-3 text-body-medium text-text-primary outline-none transition-colors hover:bg-background-secondary-hover focus-visible:ring-2 focus-visible:ring-border-focus-ring"
     >
       {label}

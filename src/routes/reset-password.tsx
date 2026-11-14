@@ -7,7 +7,7 @@ import { Button, ButtonLink } from '@/components/base/buttons/button'
 import { Input } from '@/components/base/input/input'
 import { toast } from '@/components/base/toast/toast'
 import { authClient } from '@/lib/auth-client'
-import { authErrorMessage } from '@/lib/auth-errors'
+import { NETWORK_ERROR_MESSAGE, authErrorMessage } from '@/lib/auth-errors'
 import { headTitle } from '@/lib/site'
 import { fetchPublicConfig } from '@/server/functions/auth'
 
@@ -43,19 +43,23 @@ function ResetPasswordPage() {
     }
 
     setPending(true)
-    const { error } = await authClient.resetPassword({
-      newPassword: password,
-      token,
-    })
-    setPending(false)
+    try {
+      const { error } = await authClient.resetPassword({
+        newPassword: password,
+        token,
+      })
+      if (error) {
+        toast.error('重置失败', { description: authErrorMessage(error) })
+        return
+      }
 
-    if (error) {
-      toast.error('重置失败', { description: authErrorMessage(error) })
-      return
+      toast.success('密码已重置，请重新登录')
+      await router.navigate({ to: '/login' })
+    } catch {
+      toast.error('重置失败', { description: NETWORK_ERROR_MESSAGE })
+    } finally {
+      setPending(false)
     }
-
-    toast.success('密码已重置，请重新登录')
-    await router.navigate({ to: '/login' })
   }
 
   // An old reset mail can still be opened after the admin turns password
@@ -85,24 +89,32 @@ function ResetPasswordPage() {
       title="设置新密码"
       description="重置链接 1 小时内有效，提交后其他设备会退出登录。"
     >
-      <Input
-        label="新密码"
-        type="password"
-        value={password}
-        onChange={setPassword}
-        autoComplete="new-password"
-        hint="至少 8 位"
-      />
-      <Input
-        label="确认新密码"
-        type="password"
-        value={confirm}
-        onChange={setConfirm}
-        autoComplete="new-password"
-      />
-      <Button onClick={submit} disabled={pending || !password || !confirm}>
-        {pending ? '提交中…' : '重置密码'}
-      </Button>
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void submit()
+        }}
+      >
+        <Input
+          label="新密码"
+          type="password"
+          value={password}
+          onChange={setPassword}
+          autoComplete="new-password"
+          hint="至少 8 位"
+        />
+        <Input
+          label="确认新密码"
+          type="password"
+          value={confirm}
+          onChange={setConfirm}
+          autoComplete="new-password"
+        />
+        <Button type="submit" disabled={pending || !password || !confirm}>
+          {pending ? '提交中…' : '重置密码'}
+        </Button>
+      </form>
 
       <Link
         to="/login"

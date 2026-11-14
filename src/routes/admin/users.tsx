@@ -41,6 +41,10 @@ type BanTarget = { id: string; email: string; banned: boolean }
 
 function AdminUsersPage() {
   const queryClient = useQueryClient()
+  const { session } = Route.useRouteContext()
+  // The server already refuses both actions on yourself; the row says so
+  // instead of offering a button that can only fail.
+  const selfId = session?.user.id
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(1)
@@ -144,8 +148,15 @@ function AdminUsersPage() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex min-w-0 flex-col">
-                    <span className="truncate text-body-medium text-text-primary">
-                      {item.name}
+                    <span className="flex items-center gap-2">
+                      <span className="truncate text-body-medium text-text-primary">
+                        {item.name}
+                      </span>
+                      {item.id === selfId ? (
+                        <Chip variant="caption" color="gray">
+                          当前账号
+                        </Chip>
+                      ) : null}
                     </span>
                     <span className="truncate text-caption-1-regular text-text-tertiary">
                       {item.email}
@@ -163,6 +174,7 @@ function AdminUsersPage() {
                     <Select
                       aria-label={`角色 ${item.email}`}
                       size="sm"
+                      isDisabled={item.id === selfId}
                       selectedKey={item.role}
                       onSelectionChange={(key) =>
                         setRoleTarget({
@@ -200,6 +212,7 @@ function AdminUsersPage() {
                 <Button
                   size="xs"
                   variant="secondary"
+                  disabled={item.id === selfId}
                   className={
                     item.banned
                       ? 'self-start'
@@ -239,8 +252,15 @@ function AdminUsersPage() {
                   <TableRow key={item.id} id={item.id}>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span className="text-body-medium text-text-primary">
-                          {item.name}
+                        <span className="flex items-center gap-2">
+                          <span className="text-body-medium text-text-primary">
+                            {item.name}
+                          </span>
+                          {item.id === selfId ? (
+                            <Chip variant="caption" color="gray">
+                              当前账号
+                            </Chip>
+                          ) : null}
                         </span>
                         <span className="text-caption-1-regular text-text-tertiary">
                           {item.email}
@@ -251,6 +271,7 @@ function AdminUsersPage() {
                       <Select
                         aria-label={`角色 ${item.email}`}
                         size="sm"
+                        isDisabled={item.id === selfId}
                         selectedKey={item.role}
                         onSelectionChange={(key) =>
                           setRoleTarget({
@@ -287,6 +308,7 @@ function AdminUsersPage() {
                       <Button
                         size="xs"
                         variant="secondary"
+                        disabled={item.id === selfId}
                         className={
                           item.banned ? undefined : 'text-text-error-primary'
                         }

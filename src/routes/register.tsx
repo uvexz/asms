@@ -22,6 +22,7 @@ import { Label } from '@/components/base/input/label'
 import { toast } from '@/components/base/toast/toast'
 import { authClient } from '@/lib/auth-client'
 import { authErrorMessage } from '@/lib/auth-errors'
+import { EMAIL_PATTERN } from '@/lib/validate'
 import { headTitle } from '@/lib/site'
 import { fetchPublicConfig, fetchSetupStatus } from '@/server/functions/auth'
 
@@ -39,7 +40,6 @@ export const Route = createFileRoute('/register')({
   component: RegisterPage,
 })
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const FIELD_RING =
   'focus-within:not-has-[[aria-invalid=true]]:ring-border-focus-ring focus-within:has-[[aria-invalid=true]]:ring-border-error-default'
 const FIELD_SIZE = 'h-11 sm:h-9'

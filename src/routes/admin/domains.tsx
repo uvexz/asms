@@ -27,7 +27,8 @@ import {
   PageHeader,
 } from '@/components/app/page-header'
 import { domainStatusColor, domainStatusLabel } from '@/lib/admin-labels'
-import { adminDomainsQuery, invalidateDomains } from '@/lib/queries'
+import { NETWORK_ERROR_MESSAGE } from '@/lib/auth-errors'
+import { adminDomainsQuery, invalidateDomains, queryKeys } from '@/lib/queries'
 import { headTitle } from '@/lib/site'
 import {
   adminAddDomainFn,
@@ -37,6 +38,7 @@ import {
   adminUpdateDomainFn,
   adminVerifyDomainFn,
 } from '@/server/functions/admin'
+import type { adminDomainsFn } from '@/server/functions/admin'
 
 export const Route = createFileRoute('/admin/domains')({
   head: headTitle('域名'),
@@ -52,6 +54,9 @@ type DnsRecord = {
   priority?: number
   status?: string
 }
+
+/** The whole cached payload, so an optimistic patch keeps its `Result` shape. */
+type AdminDomainsResult = Awaited<ReturnType<typeof adminDomainsFn>>
 
 function parseRecords(value: string | null): DnsRecord[] {
   if (!value) return []
@@ -130,11 +135,47 @@ function AdminDomainsPage() {
       receivingEnabled?: boolean
       temporaryEnabled?: boolean
     }) => adminUpdateDomainFn({ data: input }),
-    onSuccess: async (result) => {
-      if (!result.ok) {
-        toast.error(result.message)
-        return
+    // A switch that only moves after the round trip reads as "the click did
+    // not register" — the thumb snaps back and is pushed over again. Write the
+    // flip into the cache first, put it back if the server refuses.
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.adminDomains })
+      const previous = queryClient.getQueryData<AdminDomainsResult>(
+        queryKeys.adminDomains,
+      )
+      queryClient.setQueryData<AdminDomainsResult>(
+        queryKeys.adminDomains,
+        (current) =>
+          current?.ok
+            ? {
+                ...current,
+                data: {
+                  ...current.data,
+                  items: current.data.items.map((domain) =>
+                    domain.id === input.id ? { ...domain, ...input } : domain,
+                  ),
+                },
+              }
+            : current,
+      )
+      return { previous }
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.adminDomains, context.previous)
       }
+      toast.error('更新失败', { description: NETWORK_ERROR_MESSAGE })
+    },
+    onSuccess: (result, _input, context) => {
+      if (!result.ok) {
+        if (context?.previous) {
+          queryClient.setQueryData(queryKeys.adminDomains, context.previous)
+        }
+        toast.error(result.message)
+      }
+    },
+    // The poll-free list still reconciles: the server owns the final truth.
+    onSettled: async () => {
       await refreshAll()
     },
   })
@@ -414,7 +455,13 @@ function AddDomainModal({
   return (
     <Modal isOpen={isOpen} onOpenChange={onOpenChange} size="sm">
       {({ close }) => (
-        <>
+        <form
+          className="flex min-h-0 flex-1 flex-col gap-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            if (!create.isPending && name.trim()) create.mutate()
+          }}
+        >
           <ModalHeader
             title="添加域名"
             description="Resend 中已有同名域名时会直接接入，否则新建并返回 DNS 记录。"
@@ -425,6 +472,7 @@ function AddDomainModal({
               placeholder="mail.example.com"
               value={name}
               onChange={(value) => setName(value.toLowerCase())}
+              autoComplete="off"
               hint="建议使用子域，避免影响现有邮箱服务"
             />
           </ModalBody>
@@ -432,14 +480,11 @@ function AddDomainModal({
             <Button variant="secondary" onClick={close}>
               取消
             </Button>
-            <Button
-              onClick={() => create.mutate()}
-              disabled={create.isPending || !name.trim()}
-            >
+            <Button type="submit" disabled={create.isPending || !name.trim()}>
               {create.isPending ? '添加中…' : '添加'}
             </Button>
           </ModalFooter>
-        </>
+        </form>
       )}
     </Modal>
   )

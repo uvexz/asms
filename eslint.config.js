@@ -22,8 +22,10 @@ export default [
     ignores: [
       'eslint.config.js',
       'prettier.config.js',
-      'src/components/**',
-      'src/utils/**',
+      // Vendored BoardUI source: kept as-is so a component upgrade stays a
+      // straight overwrite. Everything the app itself writes — including
+      // `components/app` and `components/application` — is linted.
+      'src/components/base/**',
       'src/styles/**',
       'src/routeTree.gen.ts',
       'scripts/**',

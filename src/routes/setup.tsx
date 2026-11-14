@@ -6,6 +6,7 @@ import { Button, ButtonLink } from '@/components/base/buttons/button'
 import { Input } from '@/components/base/input/input'
 import { toast } from '@/components/base/toast/toast'
 import { authClient } from '@/lib/auth-client'
+import { NETWORK_ERROR_MESSAGE } from '@/lib/auth-errors'
 import { headTitle } from '@/lib/site'
 import { claimAdmin, fetchSetupStatus } from '@/server/functions/auth'
 
@@ -25,8 +26,7 @@ export const Route = createFileRoute('/setup')({
 })
 
 function SetupPage() {
-  const { setup } = Route.useRouteContext()
-  const { session, site } = Route.useRouteContext()
+  const { setup, session, site } = Route.useRouteContext()
   const router = useRouter()
   const [token, setToken] = useState('')
   const [pending, setPending] = useState(false)
@@ -35,24 +35,29 @@ function SetupPage() {
   const submit = async () => {
     if (pending) return
     setPending(true)
-    const result = await claimAdmin({ data: { token: token.trim() } })
-    setPending(false)
+    try {
+      const result = await claimAdmin({ data: { token: token.trim() } })
 
-    if (!result.ok) {
-      toast.error('初始化失败', { description: result.message })
-      return
-    }
-    if (!result.data.promoted) {
-      toast.error('初始化失败', { description: '当前实例已存在管理员' })
-      return
-    }
+      if (!result.ok) {
+        toast.error('初始化失败', { description: result.message })
+        return
+      }
+      if (!result.data.promoted) {
+        toast.error('初始化失败', { description: '当前实例已存在管理员' })
+        return
+      }
 
-    toast.success('初始化完成', { description: '你已成为管理员' })
-    // The claim changed role and verification behind a cached session cookie;
-    // re-read it so the admin gates see the new values on the first try.
-    await authClient.getSession({ query: { disableCookieCache: true } })
-    await router.invalidate()
-    await router.navigate({ to: '/admin' })
+      toast.success('初始化完成', { description: '你已成为管理员' })
+      // The claim changed role and verification behind a cached session cookie;
+      // re-read it so the admin gates see the new values on the first try.
+      await authClient.getSession({ query: { disableCookieCache: true } })
+      await router.invalidate()
+      await router.navigate({ to: '/admin' })
+    } catch {
+      toast.error('初始化失败', { description: NETWORK_ERROR_MESSAGE })
+    } finally {
+      setPending(false)
+    }
   }
 
   return (

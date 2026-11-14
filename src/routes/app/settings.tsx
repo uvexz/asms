@@ -11,7 +11,7 @@ import { toast } from '@/components/base/toast/toast'
 import { PageHeader } from '@/components/app/page-header'
 import { TelegramLink } from '@/components/app/settings/telegram-link'
 import { authClient } from '@/lib/auth-client'
-import { authErrorMessage } from '@/lib/auth-errors'
+import { NETWORK_ERROR_MESSAGE, authErrorMessage } from '@/lib/auth-errors'
 import { providerLabel } from '@/lib/oauth-providers'
 import {
   linkedAccountsQuery,
@@ -77,16 +77,23 @@ function SettingsPage() {
   if (!user) return null
 
   const saveName = async () => {
-    if (!name.trim()) return
+    if (!name.trim() || pending) return
     setPending(true)
-    const { error } = await authClient.updateUser({ name: name.trim() })
-    setPending(false)
-    if (error) {
-      toast.error('保存失败', { description: authErrorMessage(error) })
-      return
+    try {
+      const { error } = await authClient.updateUser({ name: name.trim() })
+      if (error) {
+        toast.error('保存失败', { description: authErrorMessage(error) })
+        return
+      }
+      toast.success('昵称已更新')
+      await router.invalidate()
+    } catch {
+      // The request never landed. Without this the button stays disabled for
+      // the rest of the session and the only way out is a reload.
+      toast.error('保存失败', { description: NETWORK_ERROR_MESSAGE })
+    } finally {
+      setPending(false)
     }
-    toast.success('昵称已更新')
-    await router.invalidate()
   }
 
   const changePassword = async () => {
@@ -95,19 +102,24 @@ function SettingsPage() {
       return
     }
     setPending(true)
-    const { error } = await authClient.changePassword({
-      currentPassword,
-      newPassword,
-      revokeOtherSessions: true,
-    })
-    setPending(false)
-    if (error) {
-      toast.error('修改失败', { description: authErrorMessage(error) })
-      return
+    try {
+      const { error } = await authClient.changePassword({
+        currentPassword,
+        newPassword,
+        revokeOtherSessions: true,
+      })
+      if (error) {
+        toast.error('修改失败', { description: authErrorMessage(error) })
+        return
+      }
+      setCurrentPassword('')
+      setNewPassword('')
+      toast.success('密码已更新')
+    } catch {
+      toast.error('修改失败', { description: NETWORK_ERROR_MESSAGE })
+    } finally {
+      setPending(false)
     }
-    setCurrentPassword('')
-    setNewPassword('')
-    toast.success('密码已更新')
   }
 
   return (
@@ -134,23 +146,30 @@ function SettingsPage() {
           </div>
         </div>
 
-        <div className="flex items-end gap-3">
+        <form
+          className="flex items-end gap-3"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void saveName()
+          }}
+        >
           <Input
             label="昵称"
             value={name}
             onChange={setName}
+            autoComplete="nickname"
             isInvalid={!name.trim()}
             errorMessage={!name.trim() ? '昵称不能为空' : undefined}
             className="max-w-sm flex-1"
           />
           <Button
+            type="submit"
             variant="secondary"
-            onClick={saveName}
             disabled={pending || !name.trim() || name.trim() === user.name}
           >
             保存
           </Button>
-        </div>
+        </form>
       </section>
 
       <ThirdPartyAccounts />
@@ -167,30 +186,40 @@ function SettingsPage() {
               修改后会撤销其他设备上的登录会话。
             </p>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Input
-              label="当前密码"
-              type="password"
-              value={currentPassword}
-              onChange={setCurrentPassword}
-            />
-            <Input
-              label="新密码"
-              type="password"
-              value={newPassword}
-              onChange={setNewPassword}
-              hint="至少 8 位"
-            />
-          </div>
-          <div>
-            <Button
-              variant="secondary"
-              onClick={changePassword}
-              disabled={pending || !currentPassword || !newPassword}
-            >
-              更新密码
-            </Button>
-          </div>
+          <form
+            className="flex flex-col gap-5"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void changePassword()
+            }}
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Input
+                label="当前密码"
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={setCurrentPassword}
+              />
+              <Input
+                label="新密码"
+                type="password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={setNewPassword}
+                hint="至少 8 位"
+              />
+            </div>
+            <div>
+              <Button
+                type="submit"
+                variant="secondary"
+                disabled={pending || !currentPassword || !newPassword}
+              >
+                更新密码
+              </Button>
+            </div>
+          </form>
         </section>
       ) : null}
 
@@ -256,6 +285,8 @@ function ThirdPartyAccounts() {
       toast.error('解绑失败', {
         description: lastWayIn ? '这是唯一的登录方式' : authErrorMessage(error),
       })
+      // Rethrowing keeps the confirm dialog open so the user can cancel it
+      // deliberately instead of watching it vanish on a failure.
       throw error
     }
     toast.success('已解绑')

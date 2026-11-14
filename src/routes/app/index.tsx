@@ -79,24 +79,18 @@ function OverviewPage() {
       icon: RiInboxLine,
       label: '长期邮箱',
       value: String(overview.permanent),
-      delta: '',
-      deltaColor: 'neutral',
       tone: 'blue',
     },
     {
       icon: RiTimeLine,
       label: '临时邮箱',
       value: String(overview.temporary),
-      delta: '',
-      deltaColor: 'neutral',
       tone: 'purple',
     },
     {
       icon: RiMailUnreadLine,
       label: '未读邮件',
       value: String(overview.unread),
-      delta: '',
-      deltaColor: 'neutral',
       tone: 'orange',
     },
     {
@@ -105,8 +99,6 @@ function OverviewPage() {
       value: overview.usage.unlimited
         ? '不限'
         : `${overview.usage.used} / ${overview.usage.limit}`,
-      delta: '',
-      deltaColor: 'neutral',
       caption: overview.usage.unlimited ? '管理员不限额' : '每日额度',
       tone: 'emerald',
     },

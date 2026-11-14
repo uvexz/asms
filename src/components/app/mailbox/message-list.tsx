@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import type { KeyboardEvent } from 'react'
 import {
   RiDeleteBin6Line,
   RiFileCopyLine,
@@ -29,6 +30,42 @@ import { cx } from '@/utils/cx'
 import { PanelHeader } from './panel-header'
 import { isRetainedTempMailbox } from './types'
 import type { MailboxSummary, MessageSummary } from './types'
+
+/**
+ * Arrow keys move between rows instead of asking the reader to Tab through
+ * twenty of them. Focus is read from the DOM rather than tracked in state:
+ * the list is a plain sequence of buttons and the browser already owns which
+ * one is focused.
+ */
+function onRowKeyDown(event: KeyboardEvent<HTMLUListElement>) {
+  if (
+    event.key !== 'ArrowDown' &&
+    event.key !== 'ArrowUp' &&
+    event.key !== 'Home' &&
+    event.key !== 'End'
+  ) {
+    return
+  }
+
+  const rows = Array.from(
+    event.currentTarget.querySelectorAll<HTMLButtonElement>(
+      '[data-message-row]',
+    ),
+  )
+  const index = rows.findIndex((row) => row === document.activeElement)
+  if (index === -1) return
+
+  event.preventDefault()
+  const next =
+    event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? rows.length - 1
+        : event.key === 'ArrowDown'
+          ? Math.min(index + 1, rows.length - 1)
+          : Math.max(index - 1, 0)
+  rows[next]?.focus()
+}
 
 export function MessageList({
   mailboxes,
@@ -183,71 +220,77 @@ export function MessageList({
               />
             </div>
           ) : (
-            <div className="divide-y divide-separator-border">
+            <ul
+              role="list"
+              className="divide-y divide-separator-border"
+              onKeyDown={onRowKeyDown}
+            >
               {items.map((item) => {
                 const active = item.id === selectedMessageId
                 return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => onSelectMessage(item.id)}
-                    aria-current={active ? 'true' : undefined}
-                    className={cx(
-                      'flex w-full flex-col gap-1 py-3 text-start outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-focus-ring',
-                      active
-                        ? 'border-s-2 border-accent-600 bg-accent-50 pe-4 ps-[14px] dark:bg-accent-950/40'
-                        : 'border-s-2 border-transparent px-4 hover:bg-background-secondary-hover',
-                    )}
-                  >
-                    <span className="flex items-center justify-between gap-2">
-                      <span className="flex min-w-0 items-center gap-2">
-                        {!item.isRead ? (
-                          <span className="size-1.5 shrink-0 rounded-full bg-accent-600" />
-                        ) : null}
-                        <span
-                          className={
-                            item.isRead
-                              ? 'truncate text-body-regular text-text-secondary'
-                              : 'truncate text-body-medium text-text-primary'
-                          }
-                        >
-                          {item.fromName || item.fromAddress}
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      data-message-row
+                      onClick={() => onSelectMessage(item.id)}
+                      aria-current={active ? 'true' : undefined}
+                      className={cx(
+                        'flex w-full flex-col gap-1 py-3 text-start outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-focus-ring',
+                        active
+                          ? 'border-s-2 border-accent-600 bg-accent-50 pe-4 ps-[14px] dark:bg-accent-950/40'
+                          : 'border-s-2 border-transparent px-4 hover:bg-background-secondary-hover',
+                      )}
+                    >
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="flex min-w-0 items-center gap-2">
+                          {!item.isRead ? (
+                            <span className="size-1.5 shrink-0 rounded-full bg-accent-600" />
+                          ) : null}
+                          <span
+                            className={
+                              item.isRead
+                                ? 'truncate text-body-regular text-text-secondary'
+                                : 'truncate text-body-medium text-text-primary'
+                            }
+                          >
+                            {item.fromName || item.fromAddress}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-caption-1-regular text-text-tertiary">
+                          {formatRelative(item.receivedAt)}
                         </span>
                       </span>
-                      <span className="shrink-0 text-caption-1-regular text-text-tertiary">
-                        {formatRelative(item.receivedAt)}
+                      <span
+                        className={
+                          item.isRead
+                            ? 'truncate text-caption-1-regular text-text-tertiary'
+                            : 'truncate text-caption-1-semibold text-text-primary'
+                        }
+                      >
+                        {item.subject || '(无主题)'}
                       </span>
-                    </span>
-                    <span
-                      className={
-                        item.isRead
-                          ? 'truncate text-caption-1-regular text-text-tertiary'
-                          : 'truncate text-caption-1-semibold text-text-primary'
-                      }
-                    >
-                      {item.subject || '(无主题)'}
-                    </span>
-                    <span className="truncate text-caption-1-regular text-text-tertiary">
-                      {item.snippet}
-                    </span>
-                    {!mailbox ? (
-                      <span className="flex min-w-0 items-center gap-1 text-caption-1-regular text-text-tertiary">
-                        <RiMailLine className="size-3 shrink-0" />
-                        <span className="truncate">{item.mailboxAddress}</span>
-                        {item.mailboxKind === 'temporary' ? (
-                          <Chip variant="caption" color="yellow">
-                            临时
-                          </Chip>
-                        ) : null}
+                      <span className="truncate text-caption-1-regular text-text-tertiary">
+                        {item.snippet}
                       </span>
-                    ) : null}
-                  </button>
+                      {!mailbox ? (
+                        <span className="flex min-w-0 items-center gap-1 text-caption-1-regular text-text-tertiary">
+                          <RiMailLine className="size-3 shrink-0" />
+                          <span className="truncate">{item.mailboxAddress}</span>
+                          {item.mailboxKind === 'temporary' ? (
+                            <Chip variant="caption" color="yellow">
+                              临时
+                            </Chip>
+                          ) : null}
+                        </span>
+                      ) : null}
+                    </button>
+                  </li>
                 )
               })}
-            </div>
+            </ul>
           )}
         </div>
-        <ScrollFade progress={fade.progress} />
+        <ScrollFade overlayRef={fade.overlayRef} />
       </div>
 
       {total > pageSize ? (
@@ -305,7 +348,7 @@ function FilterPill({
       onClick={onClick}
       aria-current={active ? 'true' : undefined}
       className={cx(
-        'flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-caption-1-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-border-focus-ring',
+        'flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-caption-1-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-border-focus-ring pointer-coarse:py-1.5',
         active
           ? 'border-accent-600 bg-accent-50 text-accent-700 dark:bg-accent-950/40 dark:text-accent-300'
           : 'border-border-button-default text-text-secondary hover:bg-background-secondary-hover',

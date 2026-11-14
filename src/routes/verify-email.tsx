@@ -6,7 +6,7 @@ import { Button, ButtonLink } from '@/components/base/buttons/button'
 import { LinkButton } from '@/components/base/buttons/link-button'
 import { toast } from '@/components/base/toast/toast'
 import { authClient } from '@/lib/auth-client'
-import { authErrorMessage } from '@/lib/auth-errors'
+import { NETWORK_ERROR_MESSAGE, authErrorMessage } from '@/lib/auth-errors'
 import { headTitle } from '@/lib/site'
 import { useSignOut } from '@/lib/use-sign-out'
 
@@ -76,44 +76,54 @@ function VerifyEmailPage() {
   const resend = async () => {
     if (!email || pending || cooldown > 0) return
     setPending(true)
-    const { error: failed } = await authClient.sendVerificationEmail({
-      email,
-      callbackURL: `${window.location.origin}/verify-email?verified=1`,
-    })
-    setPending(false)
+    try {
+      const { error: failed } = await authClient.sendVerificationEmail({
+        email,
+        callbackURL: `${window.location.origin}/verify-email?verified=1`,
+      })
 
-    if (failed) {
-      if (failed.code === 'EMAIL_ALREADY_VERIFIED') {
-        toast.success('邮箱已验证')
-        await enterApp()
+      if (failed) {
+        if (failed.code === 'EMAIL_ALREADY_VERIFIED') {
+          toast.success('邮箱已验证')
+          await enterApp()
+          return
+        }
+        toast.error('发送失败', { description: authErrorMessage(failed) })
         return
       }
-      toast.error('发送失败', { description: authErrorMessage(failed) })
-      return
-    }
 
-    setCooldown(RESEND_COOLDOWN_SECONDS)
-    toast.success('验证邮件已发送', {
-      description: `请查收 ${email} 的收件箱。`,
-    })
+      setCooldown(RESEND_COOLDOWN_SECONDS)
+      toast.success('验证邮件已发送', {
+        description: `请查收 ${email} 的收件箱。`,
+      })
+    } catch {
+      toast.error('发送失败', { description: NETWORK_ERROR_MESSAGE })
+    } finally {
+      setPending(false)
+    }
   }
 
   const check = async () => {
     if (checking) return
     setChecking(true)
-    const { data } = await authClient.getSession({
-      query: { disableCookieCache: true },
-    })
-    setChecking(false)
+    try {
+      const { data } = await authClient.getSession({
+        query: { disableCookieCache: true },
+      })
 
-    if (data?.user.emailVerified) {
-      await router.invalidate()
-      await router.navigate({ to: '/app' })
-      return
+      if (data?.user.emailVerified) {
+        await router.invalidate()
+        await router.navigate({ to: '/app' })
+        return
+      }
+      toast.info('还没有完成验证', {
+        description: '请打开邮件里的链接完成验证。',
+      })
+    } catch {
+      toast.error('检查失败', { description: NETWORK_ERROR_MESSAGE })
+    } finally {
+      setChecking(false)
     }
-    toast.info('还没有完成验证', {
-      description: '请打开邮件里的链接完成验证。',
-    })
   }
 
   // The endpoint appends `error` to the callback, so a failure arrives with

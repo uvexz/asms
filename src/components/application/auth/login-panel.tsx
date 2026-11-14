@@ -1,6 +1,7 @@
 'use client'
 
-import { useRef, useState, type FormEvent } from 'react'
+import { useRef, useState  } from 'react'
+import type {FormEvent} from 'react';
 import { useRouter } from '@tanstack/react-router'
 import {
   RiCheckLine,
@@ -21,6 +22,7 @@ import { Label } from '@/components/base/input/label'
 import { Spinner } from '@/components/base/spinner/spinner'
 import { authClient } from '@/lib/auth-client'
 import { authErrorMessage } from '@/lib/auth-errors'
+import { EMAIL_PATTERN } from '@/lib/validate'
 import { cx } from '@/utils/cx'
 
 /**
@@ -33,8 +35,6 @@ import { cx } from '@/utils/cx'
  * the field that needs fixing. Server errors land in a `role="alert"` strip
  * above the form.
  */
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 /**
  * Field shells keep the system's ring for shape, but a sign-in form needs the
@@ -133,8 +133,9 @@ export function LoginPanel({
       data?.user.emailVerified === false
     // Let the check land before the page changes under the pointer. The
     // session refresh comes after, so it never flashes the signed-in card
-    // over a form the visitor is still looking at.
-    await new Promise((resolve) => setTimeout(resolve, 420))
+    // over a form the visitor is still looking at. Two frames is enough for
+    // the success state to register; 420ms was a visible tax on every login.
+    await new Promise((resolve) => setTimeout(resolve, 150))
     await router.invalidate()
     if (unverified) await router.navigate({ to: '/verify-email' })
     else if (role === 'admin') await router.navigate({ to: '/admin' })

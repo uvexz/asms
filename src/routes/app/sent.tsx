@@ -138,7 +138,15 @@ function SentPage() {
           description={email ? formatFullDateTime(email.createdAt) : ''}
         />
         <ModalBody className="flex flex-col gap-4">
-          {email ? (
+          {detail.isError || (detail.data && !detail.data.ok) ? (
+            <ErrorState
+              title="无法加载发送详情"
+              description={
+                detail.data && !detail.data.ok ? detail.data.message : undefined
+              }
+              onRetry={() => void detail.refetch()}
+            />
+          ) : email ? (
             <>
               <div className="flex flex-col gap-1 text-caption-1-regular text-text-tertiary">
                 <span>发件人：{email.fromAddress}</span>

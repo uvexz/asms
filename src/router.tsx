@@ -19,7 +19,9 @@ export function getRouter() {
     },
     scrollRestoration: true,
     defaultPreload: 'intent',
-    defaultPreloadStaleTime: 0,
+    // A hover should warm the route, not re-run its loader on every pass. Zero
+    // here meant each crossing of the sidebar cost a `fetchShell` round trip.
+    defaultPreloadStaleTime: 30_000,
     defaultErrorComponent: RouteError,
     defaultNotFoundComponent: RouteNotFound,
   })

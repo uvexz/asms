@@ -21,7 +21,7 @@ import {
 import { countdown, formatRelative } from '@/lib/format'
 import { cx } from '@/utils/cx'
 import { PanelHeader } from './panel-header'
-import { isRetainedTempMailbox } from './types'
+import { isRetainedTempMailbox, sortMailboxes } from './types'
 import type { MailboxSummary } from './types'
 
 export function MailboxRail({
@@ -37,17 +37,9 @@ export function MailboxRail({
 }) {
   const fade = useScrollFade()
 
-  const permanent = mailboxes
-    .filter((mailbox) => mailbox.kind === 'permanent')
-    .sort((a, b) => a.address.localeCompare(b.address))
-  const temporary = mailboxes
-    .filter((mailbox) => mailbox.kind === 'temporary')
-    .sort((a, b) => {
-      const aRetained = isRetainedTempMailbox(a)
-      const bRetained = isRetainedTempMailbox(b)
-      if (aRetained !== bRetained) return aRetained ? 1 : -1
-      return (a.expiresAt ?? '').localeCompare(b.expiresAt ?? '')
-    })
+  const ordered = sortMailboxes(mailboxes)
+  const permanent = ordered.filter((mailbox) => mailbox.kind === 'permanent')
+  const temporary = ordered.filter((mailbox) => mailbox.kind === 'temporary')
   const unread = mailboxes.reduce((sum, mailbox) => sum + mailbox.unread, 0)
 
   return (
@@ -119,7 +111,7 @@ export function MailboxRail({
             />
           ))}
         </div>
-        <ScrollFade progress={fade.progress} />
+        <ScrollFade overlayRef={fade.overlayRef} />
       </div>
     </aside>
   )
@@ -200,7 +192,7 @@ function MailboxRow({
       <Dropdown>
         <DropdownTrigger
           aria-label={`${mailbox.address} 的操作`}
-          className="mt-1 me-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md text-foreground-icon-tertiary outline-none transition-colors hover:bg-background-tertiary-default hover:text-foreground-icon-primary focus-visible:ring-2 focus-visible:ring-border-focus-ring"
+          className="mt-1 me-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md text-foreground-icon-tertiary outline-none transition-colors hover:bg-background-tertiary-default hover:text-foreground-icon-primary focus-visible:ring-2 focus-visible:ring-border-focus-ring pointer-coarse:size-8"
         >
           <RiMore2Fill className="size-3.5" />
         </DropdownTrigger>

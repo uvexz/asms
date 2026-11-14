@@ -44,10 +44,14 @@ export function MessageDetail({
   onDelete: () => void
 }) {
   const fade = useScrollFade()
+  const scroller = useRef<HTMLDivElement>(null)
   const [allowImages, setAllowImages] = useState(false)
 
   useEffect(() => {
     setAllowImages(false)
+    // The pane keeps its scroll offset across a selection change, so opening a
+    // short mail after a long one lands the reader at the old message's footer.
+    if (scroller.current) scroller.current.scrollTop = 0
   }, [message?.id])
 
   const recipients =
@@ -95,6 +99,7 @@ export function MessageDetail({
 
       <div className="relative min-h-0 flex-1">
         <div
+          ref={scroller}
           onScroll={fade.onScroll}
           className="h-full overflow-y-auto xl:max-h-full"
         >
@@ -217,7 +222,7 @@ export function MessageDetail({
             </article>
           )}
         </div>
-        <ScrollFade progress={fade.progress} />
+        <ScrollFade overlayRef={fade.overlayRef} />
       </div>
     </section>
   )
@@ -234,9 +239,15 @@ function EmailFrame({
   const [height, setHeight] = useState(320)
 
   const doc = useMemo(() => {
-    const csp = allowImages
-      ? ''
-      : '<meta http-equiv="Content-Security-Policy" content="img-src data: cid:; object-src \'none\'; script-src \'none\';">'
+    // The frame stays locked even when the reader opts into remote images.
+    // `sandbox` already blocks scripts, but only the image directive needs to
+    // widen: objects, nested frames, form posts and a swapped `base` are not
+    // part of reading a mail, and dropping the whole policy would hand a
+    // same-origin document every capability except script execution.
+    const images = allowImages
+      ? 'img-src data: cid: https:;'
+      : 'img-src data: cid:;'
+    const csp = `<meta http-equiv="Content-Security-Policy" content="script-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'; ${images}">`
     return `<!doctype html><html><head><meta charset="utf-8">${csp}<base target="_blank"><style>
       body{margin:0;padding:0;font-family:ui-sans-serif,system-ui,"PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.65;color:#111;word-break:break-word}
       img{max-width:100%;height:auto}

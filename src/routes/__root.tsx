@@ -7,9 +7,11 @@ import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
+import { LiveRegion } from '@/components/app/live-region'
 import { SpaLinkHandler } from '@/components/app/spa-link-handler'
 import { ThemeColor } from '@/components/app/theme-color'
 import { Toaster } from '@/components/base/toast/toast'
+import { setDefaultTimeZone } from '@/lib/format'
 import { queryKeys } from '@/lib/queries'
 import { siteBranding, siteIcons, siteTitle } from '@/lib/site'
 import { fetchShell } from '@/server/functions/auth'
@@ -27,6 +29,10 @@ export interface RouterContext {
 export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async ({ context }) => {
     const shell = await fetchShell()
+    // Every date in the UI is rendered against the site's clock, and this is
+    // the one place that knows it before the first render — server and client
+    // both, so hydration never rewrites a timestamp.
+    setDefaultTimeZone(shell.site.timezone)
     const userId = shell.session?.user.id ?? null
     const previousOwner = context.queryClient.getQueryData<{
       id: string | null
@@ -84,6 +90,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <body>
         <SpaLinkHandler />
         <ThemeColor />
+        <LiveRegion />
         {children}
         <Toaster aria-label="通知" closeLabel="关闭通知" />
         <TanStackDevtools

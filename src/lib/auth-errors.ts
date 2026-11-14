@@ -40,6 +40,14 @@ const MESSAGES: Record<string, string> = {
 }
 
 /**
+ * A request that never produced an answer: offline, timed out, or the
+ * connection dropped mid-flight. Server functions resolve a `Result` instead
+ * of rejecting, so a rejection here always means transport, never a rule the
+ * user broke — the wording must not blame them.
+ */
+export const NETWORK_ERROR_MESSAGE = '网络异常，请检查连接后重试'
+
+/**
  * Better Auth returns English messages from the server. The product is in
  * Chinese, so map the codes we know and never surface a raw English string in
  * the interface. Unknown messages that are already Chinese pass through.

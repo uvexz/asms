@@ -297,7 +297,7 @@ export function ModalBody({ className, children }: ModalBodyProps) {
       >
         {children}
       </div>
-      <ScrollFade progress={fade.progress} surfaceClassName="from-background-full" />
+      <ScrollFade overlayRef={fade.overlayRef} surfaceClassName="from-background-full" />
     </div>
   );
 }

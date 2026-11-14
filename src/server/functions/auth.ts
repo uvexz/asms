@@ -45,6 +45,8 @@ export const fetchShell = createServerFn({ method: 'GET' }).handler(
         siteDescription: site.siteDescription,
         logoUrl: site.logoUrl,
         footerText: site.footerText,
+        // The one clock every timestamp in the interface is rendered against.
+        timezone: site.timezone,
       },
       emailVerificationRequired: site.emailVerificationRequired,
     }

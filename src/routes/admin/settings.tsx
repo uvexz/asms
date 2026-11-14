@@ -55,6 +55,24 @@ const MAIL_KEYS = [
   'mail.maxPrefixLength',
   'mail.allowTempSending',
 ]
+
+/**
+ * The numeric half of `MAIL_KEYS`, with the bounds the server validates
+ * against. A cleared field must never reach the server as `0`: zero is a legal
+ * value for quotas and cooldowns, so it would be accepted silently and the
+ * site would stop handing out mailboxes with nothing on screen to explain why.
+ */
+const NUMBER_FIELDS = {
+  'mail.maxPermanentMailboxes': { min: 0, max: 1000 },
+  'mail.dailySendLimit': { min: 0, max: 100000 },
+  'mail.permanentCooldownDays': { min: 0, max: 3650 },
+  'mail.retentionDays': { min: 1, max: 3650 },
+  'mail.minPrefixPermanent': { min: 1, max: 64 },
+  'mail.minPrefixTemp': { min: 1, max: 64 },
+  'mail.maxPrefixLength': { min: 1, max: 64 },
+} as const
+
+type NumberKey = keyof typeof NUMBER_FIELDS
 const RESEND_KEYS = ['resend.fromName', 'resend.systemFromAddress']
 const STORAGE_KEYS = [
   'storage.s3.endpoint',
@@ -65,6 +83,11 @@ const STORAGE_KEYS = [
 const AUTH_KEYS = ['auth.emailPasswordEnabled']
 
 export const Route = createFileRoute('/admin/settings')({
+  // The open tab is part of the address, so a reload or a shared link lands on
+  // the section that was being read instead of bouncing back to "站点".
+  validateSearch: (search: Record<string, unknown>): { tab?: string } => ({
+    tab: typeof search.tab === 'string' ? search.tab : undefined,
+  }),
   head: headTitle('站点设置'),
   component: AdminSettingsPage,
 })
@@ -72,8 +95,19 @@ export const Route = createFileRoute('/admin/settings')({
 function AdminSettingsPage() {
   const queryClient = useQueryClient()
   const router = useRouter()
-  const [tab, setTab] = useState('site')
+  const { tab: tabParam } = Route.useSearch()
+  const tab = tabParam ?? 'site'
+  const setTab = (next: string) => {
+    void router.navigate({
+      to: '/admin/settings',
+      search: (prev) => ({ ...prev, tab: next }),
+      replace: true,
+    })
+  }
   const [draft, setDraft] = useState<Record<string, unknown>>({})
+  // The OAuth editors keep their own drafts; remounting is how "放弃" reaches
+  // them without lifting every field into this component.
+  const [oauthResetKey, setOauthResetKey] = useState(0)
 
   const settings = useQuery(adminSettingsQuery())
   const oauth = useQuery(adminOAuthQuery())
@@ -149,6 +183,26 @@ function AdminSettingsPage() {
   const bool = (key: string) => Boolean(draft[key])
   const num = (key: string) => String(draft[key] ?? '')
 
+  /** An empty box stays an empty string; it never collapses to `0`. */
+  const setNumber = (key: NumberKey, raw: string) =>
+    set(key, raw.trim() === '' ? '' : Number(raw))
+
+  const numberError = (key: NumberKey): string | undefined => {
+    const value = draft[key]
+    // Not loaded yet — the skeleton owns this render, not the field.
+    if (value === undefined) return undefined
+    if (value === '') return '不能为空'
+    if (typeof value !== 'number' || !Number.isInteger(value)) {
+      return '请填写整数'
+    }
+    const { min, max } = NUMBER_FIELDS[key]
+    return value < min || value > max ? `取值 ${min}–${max}` : undefined
+  }
+
+  const hasNumberErrors = (Object.keys(NUMBER_FIELDS) as NumberKey[]).some(
+    (key) => numberError(key) !== undefined,
+  )
+
   const originals = useMemo(
     () =>
       Object.fromEntries(
@@ -184,6 +238,18 @@ function AdminSettingsPage() {
   const isDirty = (keys: string[]) =>
     keys.some((key) => dirtyKeys.includes(key))
 
+  /** One renderer for every numeric policy field, so bounds stay in one place. */
+  const policyNumberField = (key: NumberKey, label: string) => (
+    <NumberField
+      key={key}
+      label={label}
+      value={num(key)}
+      onChange={(raw) => setNumber(key, raw)}
+      hint={`${NUMBER_FIELDS[key].min}–${NUMBER_FIELDS[key].max}`}
+      error={numberError(key)}
+    />
+  )
+
   const discard = () => {
     const next: Record<string, unknown> = {}
     for (const key of Object.keys(originals)) next[key] = originals[key]
@@ -194,6 +260,7 @@ function AdminSettingsPage() {
       'storage.s3.accessKeyId': '',
       'storage.s3.secretAccessKey': '',
     })
+    setOauthResetKey((current) => current + 1)
   }
 
   if (settings.isLoading) {
@@ -288,43 +355,25 @@ function AdminSettingsPage() {
             onSave={() => save.mutate(MAIL_KEYS)}
             pending={save.isPending}
             dirty={isDirty(MAIL_KEYS)}
+            blocked={hasNumberErrors}
           >
             <div className="grid gap-4 sm:grid-cols-3">
-              <NumberField
-                label="每用户长期邮箱上限"
-                value={num('mail.maxPermanentMailboxes')}
-                onChange={(v) => set('mail.maxPermanentMailboxes', Number(v))}
-              />
-              <NumberField
-                label="每用户每日发件额度"
-                value={num('mail.dailySendLimit')}
-                onChange={(v) => set('mail.dailySendLimit', Number(v))}
-              />
-              <NumberField
-                label="邮件保留天数（收件与已发送）"
-                value={num('mail.retentionDays')}
-                onChange={(v) => set('mail.retentionDays', Number(v))}
-              />
-              <NumberField
-                label="长期地址冷却天数"
-                value={num('mail.permanentCooldownDays')}
-                onChange={(v) => set('mail.permanentCooldownDays', Number(v))}
-              />
-              <NumberField
-                label="长期前缀最短"
-                value={num('mail.minPrefixPermanent')}
-                onChange={(v) => set('mail.minPrefixPermanent', Number(v))}
-              />
-              <NumberField
-                label="临时前缀最短"
-                value={num('mail.minPrefixTemp')}
-                onChange={(v) => set('mail.minPrefixTemp', Number(v))}
-              />
-              <NumberField
-                label="前缀最长"
-                value={num('mail.maxPrefixLength')}
-                onChange={(v) => set('mail.maxPrefixLength', Number(v))}
-              />
+              {policyNumberField(
+                'mail.maxPermanentMailboxes',
+                '每用户长期邮箱上限',
+              )}
+              {policyNumberField('mail.dailySendLimit', '每用户每日发件额度')}
+              {policyNumberField(
+                'mail.retentionDays',
+                '邮件保留天数（收件与已发送）',
+              )}
+              {policyNumberField(
+                'mail.permanentCooldownDays',
+                '长期地址冷却天数',
+              )}
+              {policyNumberField('mail.minPrefixPermanent', '长期前缀最短')}
+              {policyNumberField('mail.minPrefixTemp', '临时前缀最短')}
+              {policyNumberField('mail.maxPrefixLength', '前缀最长')}
             </div>
             <Switch
               size="sm"
@@ -476,7 +525,7 @@ function AdminSettingsPage() {
           <div className="mt-4 flex flex-col gap-4">
             {oauthItems.map((item) => (
               <OAuthEditor
-                key={`${item.provider}-${item.clientId}-${item.issuer}`}
+                key={`${item.provider}-${item.clientId}-${item.issuer}-${oauthResetKey}`}
                 provider={item.provider}
                 label={providerLabel(item.provider)}
                 callbackBase={callbackBase}
@@ -495,7 +544,9 @@ function AdminSettingsPage() {
       {dirtyKeys.length > 0 ? (
         <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border-button-default bg-background-primary-default p-3 shadow-dropdown">
           <span className="text-body-regular text-text-secondary">
-            有 {dirtyKeys.length} 项修改尚未保存
+            {hasNumberErrors
+              ? '先修正标记为错误的数值，再保存'
+              : `有 ${dirtyKeys.length} 项修改尚未保存`}
           </span>
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="small" onClick={discard}>
@@ -505,7 +556,7 @@ function AdminSettingsPage() {
               size="small"
               leadingIcon={RiSaveLine}
               onClick={() => save.mutate(dirtyKeys)}
-              disabled={save.isPending}
+              disabled={save.isPending || hasNumberErrors}
             >
               {save.isPending ? '保存中…' : '保存全部'}
             </Button>
@@ -523,6 +574,7 @@ function SettingsCard({
   onSave,
   pending,
   dirty,
+  blocked = false,
   extra,
 }: {
   title: string
@@ -531,10 +583,19 @@ function SettingsCard({
   onSave: () => void
   pending: boolean
   dirty: boolean
+  /** Something in this card cannot be saved yet; leave the button dead. */
+  blocked?: boolean
   extra?: React.ReactNode
 }) {
   return (
-    <section className="flex flex-col gap-5 rounded-3xl border border-border-button-default bg-background-primary-default p-6">
+    <form
+      className="flex flex-col gap-5 rounded-3xl border border-border-button-default bg-background-primary-default p-6"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (pending || !dirty || blocked) return
+        onSave()
+      }}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h2 className="text-title-3-semibold text-text-primary">{title}</h2>
@@ -545,14 +606,14 @@ function SettingsCard({
       {children}
       <div className="flex justify-end">
         <Button
+          type="submit"
           leadingIcon={RiSaveLine}
-          onClick={onSave}
-          disabled={pending || !dirty}
+          disabled={pending || !dirty || blocked}
         >
           {pending ? '保存中…' : '保存'}
         </Button>
       </div>
-    </section>
+    </form>
   )
 }
 
@@ -560,12 +621,26 @@ function NumberField({
   label,
   value,
   onChange,
+  hint,
+  error,
 }: {
   label: string
   value: string
   onChange: (value: string) => void
+  hint: string
+  error?: string
 }) {
-  return <Input label={label} type="number" value={value} onChange={onChange} />
+  return (
+    <Input
+      label={label}
+      type="number"
+      value={value}
+      onChange={onChange}
+      hint={hint}
+      isInvalid={Boolean(error)}
+      errorMessage={error}
+    />
+  )
 }
 
 function masked(
@@ -637,7 +712,13 @@ function OAuthEditor({
   )
 
   return (
-    <section className="flex flex-col gap-4 rounded-3xl border border-border-button-default bg-background-primary-default p-6">
+    <form
+      className="flex flex-col gap-4 rounded-3xl border border-border-button-default bg-background-primary-default p-6"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (!save.isPending) save.mutate()
+      }}
+    >
       <div className="flex items-center justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h3 className="text-body-large-medium text-text-primary">{label}</h3>
@@ -683,14 +764,10 @@ function OAuthEditor({
         />
       ) : null}
       <div className="flex justify-end">
-        <Button
-          variant="secondary"
-          onClick={() => save.mutate()}
-          disabled={save.isPending}
-        >
+        <Button type="submit" variant="secondary" disabled={save.isPending}>
           {save.isPending ? '保存中…' : '保存'}
         </Button>
       </div>
-    </section>
+    </form>
   )
 }

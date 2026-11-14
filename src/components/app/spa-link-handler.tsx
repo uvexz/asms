@@ -24,6 +24,7 @@ export function SpaLinkHandler() {
       if (!anchor) return
       if (anchor.target && anchor.target !== '_self') return
       if (anchor.hasAttribute('download')) return
+      if (anchor.dataset.noSpa !== undefined) return
 
       const href = anchor.getAttribute('href')
       if (!href || href.startsWith('#')) return
@@ -36,6 +37,9 @@ export function SpaLinkHandler() {
       }
       if (url.origin !== window.location.origin) return
       if (url.protocol !== 'http:' && url.protocol !== 'https:') return
+      // Route handlers are not router routes: taking one over would turn a
+      // file download into a client-side 404.
+      if (url.pathname.startsWith('/api/')) return
       if (
         url.pathname === window.location.pathname &&
         url.search === window.location.search

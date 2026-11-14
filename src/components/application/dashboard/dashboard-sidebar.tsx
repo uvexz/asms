@@ -1,13 +1,16 @@
 "use client";
 
-import { useRouter } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
+import type { LinkProps } from "@tanstack/react-router";
 
-import { useState, type ComponentType, type ReactNode } from "react";
+import { useState   } from "react";
+import type {ComponentType, ReactNode} from "react";
 import { RiCloseLine, RiSideBarFill } from "@remixicon/react";
 import { ThemeToggle } from "@/components/application/theme/theme-toggle";
 import { Badge } from "@/components/base/badges/badge";
 import { cx } from "@/utils/cx";
-import { DashboardUserMenu, type SidebarUser } from "./dashboard-user-menu";
+import { DashboardUserMenu  } from "./dashboard-user-menu";
+import type {SidebarUser} from "./dashboard-user-menu";
 
 /**
  * Figma sources:
@@ -57,41 +60,19 @@ function NavItem({
   badge,
   isSelected = false,
   collapsed = false,
-  href = "#",
-  onClick,
+  href,
 }: {
   icon: IconComponent;
   label: string;
   badge?: ReactNode;
   isSelected?: boolean;
   collapsed?: boolean;
-  href?: string;
-  /** Action rows (e.g. Settings → modal) intercept the navigation. */
-  onClick?: () => void;
+  /** A real route path: the router's own `Link` handles the navigation. */
+  href: LinkProps["to"];
 }) {
-  const router = useRouter();
   return (
-    <a
-      href={href}
-      onClick={(event) => {
-        if (onClick) {
-          event.preventDefault();
-          onClick();
-          return;
-        }
-        if (
-          href &&
-          href !== "#" &&
-          event.button === 0 &&
-          !event.metaKey &&
-          !event.ctrlKey &&
-          !event.shiftKey &&
-          !event.altKey
-        ) {
-          event.preventDefault();
-          void router.navigate({ to: href as never });
-        }
-      }}
+    <Link
+      to={href}
       aria-current={isSelected ? "page" : undefined}
       aria-label={label}
       title={collapsed ? label : undefined}
@@ -122,16 +103,17 @@ function NavItem({
         </Collapsible>
       </span>
       {badge && <Collapsible collapsed={collapsed}>{badge}</Collapsible>}
-    </a>
+    </Link>
   );
 }
 
-/** A primary navigation row. Rows without an `href` are decoration only. */
+/** A primary navigation row. */
 export interface DashboardNavItem {
   key: string;
   label: string;
   icon: IconComponent;
-  href?: string;
+  /** A route path, typed against the router's own route tree. */
+  href: LinkProps["to"];
   badge?: string | number;
 }
 

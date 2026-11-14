@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/base/buttons/button'
 import { AlertDialog } from '@/components/base/modal/modal'
 import { toast } from '@/components/base/toast/toast'
+import { NETWORK_ERROR_MESSAGE } from '@/lib/auth-errors'
 import { queryKeys, telegramLinkQuery } from '@/lib/queries'
 import {
   createTelegramLinkFn,
@@ -29,32 +30,42 @@ export function TelegramLink() {
 
   const create = async () => {
     setPending(true)
-    const response = await createTelegramLinkFn()
-    setPending(false)
-    if (!response.ok) {
-      toast.error('无法生成连接', {
-        description: response.message,
-      })
-      return
+    try {
+      const response = await createTelegramLinkFn()
+      if (!response.ok) {
+        toast.error('无法生成连接', {
+          description: response.message,
+        })
+        return
+      }
+      setLink(response.data)
+    } catch {
+      toast.error('无法生成连接', { description: NETWORK_ERROR_MESSAGE })
+    } finally {
+      setPending(false)
     }
-    setLink(response.data)
   }
 
   const unlink = async () => {
     setPending(true)
-    const response = await unlinkTelegramFn()
-    setPending(false)
-    if (!response.ok) {
-      toast.error('断开失败', {
-        description: response.message,
+    try {
+      const response = await unlinkTelegramFn()
+      if (!response.ok) {
+        toast.error('断开失败', {
+          description: response.message,
+        })
+        return
+      }
+      setLink(null)
+      toast.success('已断开 Telegram')
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.telegramLink,
       })
-      return
+    } catch {
+      toast.error('断开失败', { description: NETWORK_ERROR_MESSAGE })
+    } finally {
+      setPending(false)
     }
-    setLink(null)
-    toast.success('已断开 Telegram')
-    await queryClient.invalidateQueries({
-      queryKey: queryKeys.telegramLink,
-    })
   }
 
   const copy = async () => {

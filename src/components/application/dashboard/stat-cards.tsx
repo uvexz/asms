@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type ComponentType } from "react";
+import { useState  } from "react";
+import type {ComponentType} from "react";
 import {
   RiArrowDownCircleFill,
   RiArrowUpCircleFill,
@@ -39,8 +40,9 @@ export type Stat = {
   icon: IconComponent;
   label: string;
   value: string;
-  delta: string;
-  deltaColor: "lime" | "rose" | "neutral";
+  /** Omit when there is no comparison to draw — the card then states a fact. */
+  delta?: string;
+  deltaColor?: "lime" | "rose" | "neutral";
   /** Footer variant: icon tile tint (defaults to blue). */
   tone?: StatTone;
   /** Footer variant: comparison caption in the band ("From last month"). */
@@ -60,7 +62,7 @@ const TILE_TONES: Record<StatTone, string> = {
 };
 
 const DELTA_STYLES: Record<
-  Stat["deltaColor"],
+  NonNullable<Stat["deltaColor"]>,
   { icon: IconComponent; className: string; pill: string }
 > = {
   lime: {
@@ -82,8 +84,8 @@ const DELTA_STYLES: Record<
 
 /** Tinted pill with a direction glyph — the footer band's delta readout, in
  *  the same lime and rose the chart cards use for their trend chips. */
-function DeltaPill({ delta, deltaColor }: Pick<Stat, "delta" | "deltaColor">) {
-  const { icon: Icon, className, pill } = DELTA_STYLES[deltaColor];
+function DeltaPill({ delta, deltaColor }: { delta: string; deltaColor?: Stat["deltaColor"] }) {
+  const { icon: Icon, className, pill } = DELTA_STYLES[deltaColor ?? "neutral"];
   return (
     <span
       className={cx(
@@ -131,9 +133,11 @@ function PlainStatCard({ stat }: { stat: Stat }) {
         <p className="w-full text-body-medium text-text-secondary">{stat.label}</p>
         <div className="flex w-full flex-wrap items-center gap-2">
           <p className="text-title-1-medium whitespace-nowrap text-text-primary">{stat.value}</p>
-          <Chip variant="bold" color={stat.deltaColor}>
-            {stat.delta}
-          </Chip>
+          {stat.delta ? (
+            <Chip variant="bold" color={stat.deltaColor ?? "neutral"}>
+              {stat.delta}
+            </Chip>
+          ) : null}
         </div>
       </div>
     </section>

@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { RiAddLine, RiInboxLine, RiTimeLine } from '@remixicon/react'
 
 import { Button } from '@/components/base/buttons/button'
@@ -20,15 +20,13 @@ import { DomainNotice } from '@/components/app/mailbox/domain-notice'
 import { MailboxRail } from '@/components/app/mailbox/mailbox-rail'
 import { MessageDetail } from '@/components/app/mailbox/message-detail'
 import { MessageList } from '@/components/app/mailbox/message-list'
-import {
-  isMailboxVisible,
-  isRetainedTempMailbox,
-} from '@/components/app/mailbox/types'
+import { isMailboxVisible, sortMailboxes } from '@/components/app/mailbox/types'
 import type {
   MailboxKind,
   MailboxSummary,
 } from '@/components/app/mailbox/types'
 import { useMailPolicy } from '@/lib/use-mail-policy'
+import { announce } from '@/lib/announcer'
 import {
   REFRESH_INTERVAL,
   domainsQuery,
@@ -110,18 +108,12 @@ function MailboxesPage() {
   const mailboxesError =
     mailboxes.data && !mailboxes.data.ok ? mailboxes.data.message : undefined
   const now = Date.now()
-  const active = all
-    .filter((mailbox) => isMailboxVisible(mailbox, now))
-    .sort((a, b) => {
-      if (a.kind !== b.kind) return a.kind === 'permanent' ? -1 : 1
-      if (a.kind === 'permanent') return a.address.localeCompare(b.address)
-      const aRetained = isRetainedTempMailbox(a)
-      const bRetained = isRetainedTempMailbox(b)
-      if (aRetained !== bRetained) return aRetained ? 1 : -1
-      return (a.expiresAt ?? '').localeCompare(b.expiresAt ?? '')
-    })
+  const active = sortMailboxes(
+    all.filter((mailbox) => isMailboxVisible(mailbox, now)),
+  )
   const selectedMailbox = active.find((mailbox) => mailbox.id === mailboxParam)
   const mailboxId = selectedMailbox?.id
+  const totalUnread = active.reduce((sum, mailbox) => sum + mailbox.unread, 0)
 
   const list = useQuery(messagesQuery({ mailboxId, page, pageSize: PAGE_SIZE }))
 
@@ -251,6 +243,20 @@ function MailboxesPage() {
       })
     }
   }, [message?.id])
+
+  // The rail repaints itself every 30 seconds; a screen reader gets nothing
+  // from a badge quietly going from 3 to 4. The first successful read is the
+  // baseline — otherwise the whole inbox is "new" on every page load.
+  const lastUnread = useRef<number | null>(null)
+  useEffect(() => {
+    if (!mailboxes.data?.ok) return
+    const previous = lastUnread.current
+    lastUnread.current = totalUnread
+    if (previous === null || totalUnread <= previous) return
+    announce(
+      `收到 ${totalUnread - previous} 封新邮件，共 ${totalUnread} 封未读`,
+    )
+  }, [mailboxes.data, totalUnread])
 
   const selectMailbox = (id: string | undefined) => {
     setPage(1)

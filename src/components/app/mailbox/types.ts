@@ -57,3 +57,22 @@ export function isMailboxVisible(mailbox: MailboxSummary, now = Date.now()) {
     mailbox.expiresAt && new Date(mailbox.expiresAt).getTime() > now,
   )
 }
+
+/**
+ * The one order both mail panes read: permanent addresses first, alphabetically;
+ * then temporary ones with the retained (still useful) below the ones counting
+ * down, earliest expiry first. Kept here so the page and the rail cannot drift
+ * into two different orders for the same set.
+ */
+export function sortMailboxes(
+  mailboxes: readonly MailboxSummary[],
+): MailboxSummary[] {
+  return [...mailboxes].sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === 'permanent' ? -1 : 1
+    if (a.kind === 'permanent') return a.address.localeCompare(b.address)
+    const aRetained = isRetainedTempMailbox(a)
+    const bRetained = isRetainedTempMailbox(b)
+    if (aRetained !== bRetained) return aRetained ? 1 : -1
+    return (a.expiresAt ?? '').localeCompare(b.expiresAt ?? '')
+  })
+}
